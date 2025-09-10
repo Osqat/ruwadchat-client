@@ -21,7 +21,7 @@ const JoinScreen = ({ onJoin }) => {
     <div className="min-h-screen flex items-center justify-center bg-discord-darker">
       <div className="bg-discord-dark p-8 rounded-lg shadow-xl w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Mini Discord</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">Ruwad Chat</h1>
           <p className="text-discord-light">Enter your name to join the voice chat</p>
         </div>
         
