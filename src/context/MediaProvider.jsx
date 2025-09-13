@@ -24,6 +24,10 @@ export const MediaProvider = ({ children }) => {
   const remoteGainsRef = useRef(new Map()); // userId -> {source, gain}
   const preDeafenMutedRef = useRef(false);
   const globalMuteRef = useRef(false);
+  const isMobileDevice = useMemo(() => {
+    if (typeof navigator === 'undefined') return false;
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }, []);
 
   const initializeAudio = useCallback(async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -169,6 +173,10 @@ export const MediaProvider = ({ children }) => {
 
   // Camera controls
   const enableCamera = useCallback(async () => {
+    if (!isMobileDevice) {
+      console.warn('Camera is disabled on desktop');
+      throw new Error('Camera is disabled on desktop');
+    }
     if (!localStream) return null;
     if (isCameraOn) return localStream.getVideoTracks()[0] || null;
     const cam = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -179,15 +187,19 @@ export const MediaProvider = ({ children }) => {
       setIsScreenSharing(false);
     }
     return videoTrack || null;
-  }, [localStream, isCameraOn]);
+  }, [localStream, isCameraOn, isMobileDevice]);
 
   const disableCamera = useCallback(() => {
     if (!localStream) return;
-    localStream.getVideoTracks().forEach((t) => { t.stop(); localStream.removeTrack(t); });
+    localStream.getVideoTracks().forEach((t) => { try { t.stop(); } catch {} localStream.removeTrack(t); });
     setIsCameraOn(false);
   }, [localStream]);
 
   const toggleCamera = useCallback(async () => {
+    if (!isMobileDevice) {
+      console.warn('Camera is disabled on desktop');
+      return null;
+    }
     if (isCameraOn) {
       disableCamera();
       return null;
@@ -195,7 +207,7 @@ export const MediaProvider = ({ children }) => {
     // if screen is on, turn it off first
     if (isScreenSharing) disableScreenShare();
     return await enableCamera();
-  }, [isCameraOn, isScreenSharing, enableCamera, disableCamera]);
+  }, [isMobileDevice, isCameraOn, isScreenSharing, enableCamera, disableCamera]);
 
   // Screen share controls
   const enableScreenShare = useCallback(async () => {
@@ -221,14 +233,15 @@ export const MediaProvider = ({ children }) => {
 
   const disableScreenShare = useCallback(() => {
     if (!localStream) return;
-    localStream.getVideoTracks().forEach((t) => {
-      if (t.label.toLowerCase().includes('screen') || t.label.toLowerCase().includes('display')) {
-        try { t.stop(); } catch {}
-        localStream.removeTrack(t);
-      }
-    });
+    // remove all video tracks to avoid stale black frames
+    localStream.getVideoTracks().forEach((t) => { try { t.stop(); } catch {} localStream.removeTrack(t); });
     setIsScreenSharing(false);
   }, [localStream]);
+
+  const getRemoteGain = useCallback((userId) => {
+    const entry = remoteGainsRef.current.get(userId);
+    return entry ? entry.gain.gain.value : 1.0;
+  }, []);
 
   const toggleScreenShare = useCallback(async () => {
     if (isScreenSharing) {
@@ -248,6 +261,7 @@ export const MediaProvider = ({ children }) => {
       isDeafened,
       isCameraOn,
       isScreenSharing,
+      isMobileDevice,
       audioElements,
       initializeAudio,
       toggleMute,
@@ -264,9 +278,10 @@ export const MediaProvider = ({ children }) => {
       muteAll,
       setRemoteGain,
       setMasterGain,
+      getRemoteGain,
       cleanup,
     }),
-    [localStream, isMuted, isSpeaking, isDeafened, isCameraOn, isScreenSharing, audioElements, initializeAudio, toggleMute, toggleDeafen, enableCamera, disableCamera, toggleCamera, enableScreenShare, disableScreenShare, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, muteAll, setRemoteGain, setMasterGain, cleanup]
+    [localStream, isMuted, isSpeaking, isDeafened, isCameraOn, isScreenSharing, isMobileDevice, audioElements, initializeAudio, toggleMute, toggleDeafen, enableCamera, disableCamera, toggleCamera, enableScreenShare, disableScreenShare, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, muteAll, setRemoteGain, setMasterGain, getRemoteGain, cleanup]
   );
 
   return <MediaContext.Provider value={value}>{children}</MediaContext.Provider>;

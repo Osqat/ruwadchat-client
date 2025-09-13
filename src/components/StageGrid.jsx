@@ -12,7 +12,7 @@ export default function StageGrid({
   localSpeaking = false,
   onTileClick,
 }) {
-  const { setRemoteGain } = useMediaContext();
+  const { setRemoteGain, getRemoteGain } = useMediaContext();
   // Precompute a lookup of userId -> media stream
   const streamByUserId = useMemo(() => {
     const m = new Map(remoteStreams);
@@ -119,8 +119,9 @@ function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, isCurrent, o
               min="0"
               max="2"
               step="0.05"
-              defaultValue={1}
+              defaultValue={getRemoteGain(user.id)}
               onChange={(e) => onVolume && onVolume(Number(e.target.value))}
+              onInput={(e) => onVolume && onVolume(Number(e.target.value))}
               className="w-full"
               title={`Volume for ${user.username}`}
             />

@@ -102,8 +102,8 @@ const UserSidebar = ({
           </div>
         </div>
 
-        {/* Buttons */}
-        <div className="grid grid-cols-4 gap-2">
+        {/* Buttons (desktop only) */}
+        <div className="grid grid-cols-3 gap-2">
           <button
             onClick={onToggleMute}
             className={`flex items-center justify-center p-2 rounded transition-colors ${
@@ -122,16 +122,6 @@ const UserSidebar = ({
           >
             <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M9 7v10l-4-4H2V11h3l4-4zm13 5a7 7 0 01-7 7h-1v-2h1a5 5 0 000-10h-1V5h1a7 7 0 017 7z"/></svg>
           </button>
-          <button
-            onClick={onToggleCamera}
-            className={`flex items-center justify-center p-2 rounded transition-colors ${
-              isCameraOn ? 'bg-discord-green hover:bg-green-600' : 'bg-surface hover:bg-surface-2 border border-border'
-            }`}
-            title={isCameraOn ? 'Turn Camera Off' : 'Turn Camera On'}
-          >
-            <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M15 8l5-3v14l-5-3v2a2 2 0 01-2 2H3a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v2z"/></svg>
-          </button>
-
           <button
             onClick={onToggleScreenShare}
             className={`flex items-center justify-center p-2 rounded transition-colors bg-surface hover:bg-surface-2 border border-border`}
