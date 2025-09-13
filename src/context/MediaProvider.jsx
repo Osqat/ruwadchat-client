@@ -110,6 +110,11 @@ export const MediaProvider = ({ children }) => {
     if (masterGainRef.current) masterGainRef.current.gain.value = value;
   }, []);
 
+  const getRemoteGain = useCallback((userId) => {
+    const entry = remoteGainsRef.current.get(userId);
+    return entry ? entry.gain.gain.value : 1.0;
+  }, []);
+
   const removeAudioElement = useCallback((userId) => {
     const audio = audioElementsRef.current.get(userId);
     if (audio) {
@@ -263,9 +268,10 @@ export const MediaProvider = ({ children }) => {
       muteAll,
       setRemoteGain,
       setMasterGain,
+      getRemoteGain,
       cleanup,
     }),
-    [localStream, isMuted, isSpeaking, isDeafened, isCameraOn, isScreenSharing, audioElements, initializeAudio, toggleMute, toggleDeafen, enableCamera, disableCamera, toggleCamera, enableScreenShare, disableScreenShare, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, muteAll, setRemoteGain, setMasterGain, cleanup]
+    [localStream, isMuted, isSpeaking, isDeafened, isCameraOn, isScreenSharing, audioElements, initializeAudio, toggleMute, toggleDeafen, enableCamera, disableCamera, toggleCamera, enableScreenShare, disableScreenShare, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, muteAll, setRemoteGain, setMasterGain, getRemoteGain, cleanup]
   );
 
   return <MediaContext.Provider value={value}>{children}</MediaContext.Provider>;
