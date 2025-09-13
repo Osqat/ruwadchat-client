@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
+import { useMediaContext } from '../context/MediaProvider.jsx';
 
 // StageGrid: interactive participants area (video/avatars),
 // responsive tile sizing, speaking ring, and click interactions.
@@ -11,6 +12,7 @@ export default function StageGrid({
   localSpeaking = false,
   onTileClick,
 }) {
+  const { setRemoteGain } = useMediaContext();
   // Precompute a lookup of userId -> media stream
   const streamByUserId = useMemo(() => {
     const m = new Map(remoteStreams);
@@ -44,6 +46,7 @@ export default function StageGrid({
         const stream = streamByUserId.get(u.id);
         const isSpeaking = isSpeakingUser(u.id);
         const hasVideo = !!stream && stream.getVideoTracks && stream.getVideoTracks().length > 0;
+        const isCurrent = currentUser?.id === u.id;
         return (
           <StageTile
             key={u.id}
@@ -52,6 +55,8 @@ export default function StageGrid({
             hasVideo={hasVideo}
             isSpeaking={isSpeaking}
             sizeClass={tileSizeClass}
+            isCurrent={isCurrent}
+            onVolume={(v) => !isCurrent && setRemoteGain(u.id, v)}
             onClick={() => onTileClick?.(u)}
           />
         );
@@ -60,7 +65,7 @@ export default function StageGrid({
   );
 }
 
-function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, onClick }) {
+function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, isCurrent, onVolume, onClick }) {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -107,8 +112,21 @@ function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, onClick }) {
             )}
           </div>
         </div>
+        {!isCurrent && (
+          <div className="mt-2">
+            <input
+              type="range"
+              min="0"
+              max="2"
+              step="0.05"
+              defaultValue={1}
+              onChange={(e) => onVolume && onVolume(Number(e.target.value))}
+              className="w-full"
+              title={`Volume for ${user.username}`}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
 }
-

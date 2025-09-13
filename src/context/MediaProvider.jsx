@@ -14,6 +14,7 @@ export const MediaProvider = ({ children }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [audioElements, setAudioElements] = useState(new Map());
   const audioElementsRef = useRef(new Map());
   const audioContextRef = useRef(null);
@@ -173,6 +174,7 @@ export const MediaProvider = ({ children }) => {
     if (videoTrack) {
       localStream.addTrack(videoTrack);
       setIsCameraOn(true);
+      setIsScreenSharing(false);
     }
     return videoTrack || null;
   }, [localStream, isCameraOn]);
@@ -188,8 +190,49 @@ export const MediaProvider = ({ children }) => {
       disableCamera();
       return null;
     }
+    // if screen is on, turn it off first
+    if (isScreenSharing) disableScreenShare();
     return await enableCamera();
-  }, [isCameraOn, enableCamera, disableCamera]);
+  }, [isCameraOn, isScreenSharing, enableCamera, disableCamera]);
+
+  // Screen share controls
+  const enableScreenShare = useCallback(async () => {
+    if (!localStream) return null;
+    if (isScreenSharing) return localStream.getVideoTracks()[0] || null;
+    const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    const screenTrack = screen.getVideoTracks()[0];
+    if (screenTrack) {
+      // auto-stop when user ends share from browser UI
+      screenTrack.onended = () => {
+        disableScreenShare();
+      };
+      localStream.addTrack(screenTrack);
+      setIsScreenSharing(true);
+      setIsCameraOn(false);
+    }
+    return screenTrack || null;
+  }, [localStream, isScreenSharing]);
+
+  const disableScreenShare = useCallback(() => {
+    if (!localStream) return;
+    localStream.getVideoTracks().forEach((t) => {
+      if (t.label.toLowerCase().includes('screen') || t.label.toLowerCase().includes('display')) {
+        try { t.stop(); } catch {}
+        localStream.removeTrack(t);
+      }
+    });
+    setIsScreenSharing(false);
+  }, [localStream]);
+
+  const toggleScreenShare = useCallback(async () => {
+    if (isScreenSharing) {
+      disableScreenShare();
+      return null;
+    }
+    // if camera is on, turn it off first
+    if (isCameraOn) disableCamera();
+    return await enableScreenShare();
+  }, [isScreenSharing, isCameraOn, enableScreenShare, disableScreenShare, disableCamera]);
 
   const value = useMemo(
     () => ({
@@ -198,6 +241,7 @@ export const MediaProvider = ({ children }) => {
       isSpeaking,
       isDeafened,
       isCameraOn,
+      isScreenSharing,
       audioElements,
       initializeAudio,
       toggleMute,
@@ -205,6 +249,9 @@ export const MediaProvider = ({ children }) => {
       enableCamera,
       disableCamera,
       toggleCamera,
+      enableScreenShare,
+      disableScreenShare,
+      toggleScreenShare,
       createAudioElement,
       attachRemoteStream,
       removeAudioElement,
@@ -213,7 +260,7 @@ export const MediaProvider = ({ children }) => {
       setMasterGain,
       cleanup,
     }),
-    [localStream, isMuted, isSpeaking, isDeafened, isCameraOn, audioElements, initializeAudio, toggleMute, toggleDeafen, enableCamera, disableCamera, toggleCamera, createAudioElement, attachRemoteStream, removeAudioElement, muteAll, setRemoteGain, setMasterGain, cleanup]
+    [localStream, isMuted, isSpeaking, isDeafened, isCameraOn, isScreenSharing, audioElements, initializeAudio, toggleMute, toggleDeafen, enableCamera, disableCamera, toggleCamera, enableScreenShare, disableScreenShare, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, muteAll, setRemoteGain, setMasterGain, cleanup]
   );
 
   return <MediaContext.Provider value={value}>{children}</MediaContext.Provider>;

@@ -20,7 +20,20 @@ export const PeerProvider = ({ children }) => {
   const remoteStreamsRef = useRef(new Map());
   const videoSendersRef = useRef(new Map()); // userId -> RTCRtpSender[] for video
 
-  const iceServers = { iceServers: [ { urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' } ] };
+  const turnUrls = (import.meta.env.VITE_TURN_URLS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const turnUsername = import.meta.env.VITE_TURN_USERNAME || '';
+  const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL || '';
+  const iceServers = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      ...(
+        turnUrls.length
+          ? [{ urls: turnUrls, username: turnUsername || undefined, credential: turnCredential || undefined }]
+          : []
+      ),
+    ],
+  };
 
   const cleanupPeer = useCallback((userId) => {
     const pc = peersRef.current.get(userId);

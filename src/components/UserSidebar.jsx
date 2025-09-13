@@ -46,7 +46,7 @@ const UserSidebar = ({
   );
 
   return (
-    <div className="w-64 bg-surface-2 flex flex-col h-full border-r border-border">
+    <div className="hidden md:flex w-64 bg-surface-2 flex-col h-full border-r border-border">
       {/* Header */}
       <div className="p-4 border-b border-border">
         <h2 className="text-lg font-semibold text-white">Voice Room</h2>

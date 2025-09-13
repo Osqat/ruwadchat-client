@@ -20,6 +20,9 @@ Quick Start
 
 Env
 - VITE_SERVER_URL=http://localhost:3001
+- VITE_TURN_URLS=turn:turn.example.com:3478,turns:turn.example.com:5349
+- VITE_TURN_USERNAME=yourTurnUsername
+- VITE_TURN_CREDENTIAL=yourTurnCredential
 
 How It Works
 - SocketProvider: Manages Socket.IO connection, user join/leave, room state, mic/speaking/typing events.
@@ -37,4 +40,5 @@ Extending
 Production Notes
 - Mobile browsers require a user gesture to play audio; this app initializes audio on the join button.
 - For NAT traversal at scale, consider TURN servers in PeerProvider’s `iceServers`.
-
+  - Configure via env: `VITE_TURN_URLS`, `VITE_TURN_USERNAME`, `VITE_TURN_CREDENTIAL`.
+  - Use your own TURN; public/free relays are unreliable.

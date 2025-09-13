@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import JoinScreen from './components/JoinScreen';
 import ChatPanel from './components/ChatPanel';
 import StageGrid from './components/StageGrid.jsx';
+import MobileControls from './components/MobileControls.jsx';
 import UserSidebar from './components/UserSidebar';
 import { SocketProvider, useSocketContext } from './context/SocketProvider.jsx';
 import { MediaProvider, useMediaContext } from './context/MediaProvider.jsx';
@@ -15,7 +16,7 @@ const AppInner = () => {
   const [error, setError] = useState(null);
 
   const { socket, isConnected, join, leave, currentUser, users, room, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus, emitDeafenStatus } = useSocketContext();
-  const { initializeAudio, isMuted, isSpeaking, toggleMute, toggleDeafen, isDeafened, isCameraOn, toggleCamera, createAudioElement, attachRemoteStream, removeAudioElement, localStream } = useMediaContext();
+  const { initializeAudio, isMuted, isSpeaking, toggleMute, toggleDeafen, isDeafened, isCameraOn, toggleCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream } = useMediaContext();
   const { remoteStreams, createOffer, cleanupPeer, cleanupAllPeers, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll } = usePeerContext();
 
   const loadChatHistory = useCallback(async () => {
@@ -119,6 +120,21 @@ const AppInner = () => {
     }
   }, [isCameraOn, toggleCamera, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll, emitVideoStatus]);
 
+  const handleToggleScreenShare = useCallback(async () => {
+    if (isScreenSharing) {
+      disableLocalVideoForPeers();
+      await renegotiateWithAll();
+      emitVideoStatus(false);
+    } else {
+      const track = await toggleScreenShare();
+      if (track) {
+        await enableLocalVideoForPeers(track);
+        await renegotiateWithAll();
+        emitVideoStatus(true);
+      }
+    }
+  }, [isScreenSharing, toggleScreenShare, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll, emitVideoStatus]);
+
   // Speaking status propagation
   useEffect(() => {
     if (!hasJoined) return;
@@ -151,7 +167,7 @@ const AppInner = () => {
   if (!hasJoined) return <JoinScreen onJoin={handleJoin} />;
 
   return (
-    <div className="h-screen flex bg-surface">
+    <div className="h-screen flex bg-surface flex-col md:flex-row">
       <ConnectionStatus />
       <UserSidebar
         users={users}
@@ -165,7 +181,7 @@ const AppInner = () => {
         onLeave={handleLeave}
         speakingUsers={speakingUsers}
       />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden pb-16 md:pb-0">
         <StageGrid
           users={users}
           currentUser={currentUser}
@@ -174,8 +190,18 @@ const AppInner = () => {
           speakingUsers={speakingUsers}
           localSpeaking={isSpeaking}
         />
+        <MobileControls
+          isMuted={isMuted}
+          onToggleMute={handleToggleMute}
+          isDeafened={isDeafened}
+          onToggleDeafen={handleToggleDeafen}
+          isCameraOn={isCameraOn}
+          onToggleCamera={handleToggleCamera}
+          isScreenSharing={isScreenSharing}
+          onToggleScreenShare={handleToggleScreenShare}
+        />
       </div>
-      <div className="w-full md:w-[420px] border-l border-border bg-surface-2">
+      <div className="w-full md:w-[420px] border-l border-border bg-surface-2 md:block md:static fixed bottom-16 left-0 right-0 h-[40vh] md:h-auto">
         <ChatPanel socket={socket} messages={messages} currentUser={currentUser} room={room} onReloadHistory={loadChatHistory} />
       </div>
     </div>
