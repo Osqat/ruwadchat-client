@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import JoinScreen from './components/JoinScreen';
 import ChatPanel from './components/ChatPanel';
 import StageGrid from './components/StageGrid.jsx';
-import FullscreenMedia from './components/FullscreenMedia.jsx';
 import MobileControls from './components/MobileControls.jsx';
 import UserSidebar from './components/UserSidebar';
 import { SocketProvider, useSocketContext } from './context/SocketProvider.jsx';
@@ -15,7 +14,6 @@ const AppInner = () => {
   const [hasJoined, setHasJoined] = useState(false);
   const [messages, setMessages] = useState([]);
   const [error, setError] = useState(null);
-  const [fullscreenUserId, setFullscreenUserId] = useState(null);
 
   const { socket, isConnected, join, leave, currentUser, users, room, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus, emitDeafenStatus } = useSocketContext();
   const { initializeAudio, isMuted, isSpeaking, toggleMute, toggleDeafen, isDeafened, isCameraOn, toggleCamera, disableCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream } = useMediaContext();
@@ -185,21 +183,6 @@ const AppInner = () => {
 
   if (!hasJoined) return <JoinScreen onJoin={handleJoin} />;
 
-  const handleTileClick = useCallback((user) => {
-    const isSelf = user.id === currentUser?.id;
-    const stream = isSelf ? localStream : remoteStreams.get(user.id);
-    const hasVideo = !!stream && stream.getVideoTracks && stream.getVideoTracks().length > 0;
-    if (hasVideo) setFullscreenUserId(user.id);
-  }, [currentUser, localStream, remoteStreams]);
-
-  const fullscreenStream = useMemo(() => {
-    if (!fullscreenUserId) return null;
-    if (fullscreenUserId === currentUser?.id) return localStream;
-    return remoteStreams.get(fullscreenUserId) || null;
-  }, [fullscreenUserId, currentUser, localStream, remoteStreams]);
-
-  const fullscreenUser = useMemo(() => users.find(u => u.id === fullscreenUserId), [users, fullscreenUserId]);
-
   return (
     <div className="h-screen flex bg-surface flex-col md:flex-row">
       <ConnectionStatus />
@@ -224,7 +207,6 @@ const AppInner = () => {
           localStream={localStream}
           speakingUsers={speakingUsers}
           localSpeaking={isSpeaking}
-          onTileClick={handleTileClick}
         />
         <MobileControls
           isMuted={isMuted}
@@ -236,9 +218,6 @@ const AppInner = () => {
           isScreenSharing={isScreenSharing}
           onToggleScreenShare={handleToggleScreenShare}
         />
-        {fullscreenStream && (
-          <FullscreenMedia stream={fullscreenStream} user={fullscreenUser} onClose={() => setFullscreenUserId(null)} />
-        )}
       </div>
       <div className="w-full md:w-[420px] border-l border-border bg-surface-2 md:block md:static fixed bottom-16 left-0 right-0 h-[40vh] md:h-auto">
         <ChatPanel socket={socket} messages={messages} currentUser={currentUser} room={room} onReloadHistory={loadChatHistory} />
