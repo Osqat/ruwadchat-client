@@ -12,7 +12,7 @@ export default function StageGrid({
   localSpeaking = false,
   onTileClick,
 }) {
-  const { setRemoteGain } = useMediaContext();
+  const { setRemoteGain, getRemoteGain } = useMediaContext();
   // Precompute a lookup of userId -> media stream
   const streamByUserId = useMemo(() => {
     const m = new Map(remoteStreams);
@@ -57,7 +57,7 @@ export default function StageGrid({
             sizeClass={tileSizeClass}
             isCurrent={isCurrent}
             onVolume={(v) => !isCurrent && setRemoteGain(u.id, v)}
-            onClick={() => onTileClick?.(u)}
+            onClick={() => hasVideo && onTileClick?.(u)}
           />
         );
       })}
@@ -83,9 +83,9 @@ function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, isCurrent, o
 
   return (
     <div
-      className={`relative rounded-lg bg-surface-2 border border-border shadow-sm overflow-hidden cursor-pointer select-none ${
-        isSpeaking ? 'ring-2 ring-accent/70' : ''
-      } ${sizeClass}`}
+      className={`group relative rounded-lg bg-surface-2 border border-border shadow-sm overflow-hidden ${
+        hasVideo ? 'cursor-pointer' : 'cursor-default'
+      } select-none ${isSpeaking ? 'ring-2 ring-accent/70' : ''} ${sizeClass}`}
       onClick={onClick}
       title={user.username}
     >
@@ -99,6 +99,11 @@ function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, isCurrent, o
           >
             {user.username?.charAt(0)?.toUpperCase()}
           </div>
+        </div>
+      )}
+      {hasVideo && (
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+          <span className="text-white text-sm tracking-wide">Fullscreen</span>
         </div>
       )}
       <div className="absolute left-0 right-0 bottom-0 p-2 bg-gradient-to-t from-black/60 to-transparent">
@@ -119,8 +124,9 @@ function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, isCurrent, o
               min="0"
               max="2"
               step="0.05"
-              defaultValue={1}
+              defaultValue={getRemoteGain(user.id)}
               onChange={(e) => onVolume && onVolume(Number(e.target.value))}
+              onInput={(e) => onVolume && onVolume(Number(e.target.value))}
               className="w-full"
               title={`Volume for ${user.username}`}
             />
