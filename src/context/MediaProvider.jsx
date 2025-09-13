@@ -23,6 +23,7 @@ export const MediaProvider = ({ children }) => {
   const masterGainRef = useRef(null);
   const remoteGainsRef = useRef(new Map()); // userId -> {source, gain}
   const preDeafenMutedRef = useRef(false);
+  const globalMuteRef = useRef(false);
 
   const initializeAudio = useCallback(async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -94,7 +95,7 @@ export const MediaProvider = ({ children }) => {
     }
     const source = audioContextRef.current.createMediaStreamSource(stream);
     const gain = audioContextRef.current.createGain();
-    gain.gain.value = 1.0; // per-remote gain; masterGain applies overall boost
+    gain.gain.value = globalMuteRef.current ? 0 : 1.0; // respect global mute state
     source.connect(gain);
     gain.connect(masterGainRef.current);
     remoteGainsRef.current.set(userId, { source, gain });
@@ -125,6 +126,7 @@ export const MediaProvider = ({ children }) => {
   }, []);
 
   const muteAll = useCallback((muted) => {
+    globalMuteRef.current = !!muted;
     remoteGainsRef.current.forEach((entry) => {
       entry.gain.gain.value = muted ? 0 : 1.0;
     });
@@ -199,6 +201,10 @@ export const MediaProvider = ({ children }) => {
   const enableScreenShare = useCallback(async () => {
     if (!localStream) return null;
     if (isScreenSharing) return localStream.getVideoTracks()[0] || null;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      console.warn('Screen sharing not supported on this browser');
+      throw new Error('Screen sharing not supported on this browser');
+    }
     const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
     const screenTrack = screen.getVideoTracks()[0];
     if (screenTrack) {

@@ -178,6 +178,7 @@ const AppInner = () => {
         isDeafened={isDeafened}
         onToggleCamera={handleToggleCamera}
         isCameraOn={isCameraOn}
+        onToggleScreenShare={handleToggleScreenShare}
         onLeave={handleLeave}
         speakingUsers={speakingUsers}
       />

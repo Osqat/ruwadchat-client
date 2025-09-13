@@ -10,6 +10,7 @@ const UserSidebar = ({
   isDeafened,
   onToggleCamera,
   isCameraOn,
+  onToggleScreenShare,
   onLeave,
   speakingUsers = new Set(),
 }) => {
@@ -102,7 +103,7 @@ const UserSidebar = ({
         </div>
 
         {/* Buttons */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           <button
             onClick={onToggleMute}
             className={`flex items-center justify-center p-2 rounded transition-colors ${
@@ -129,6 +130,14 @@ const UserSidebar = ({
             title={isCameraOn ? 'Turn Camera Off' : 'Turn Camera On'}
           >
             <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M15 8l5-3v14l-5-3v2a2 2 0 01-2 2H3a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v2z"/></svg>
+          </button>
+
+          <button
+            onClick={onToggleScreenShare}
+            className={`flex items-center justify-center p-2 rounded transition-colors bg-surface hover:bg-surface-2 border border-border`}
+            title={'Share Screen'}
+          >
+            <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18a1 1 0 011 1v12a1 1 0 01-1 1h-7v2h3v2H8v-2h3v-2H3a1 1 0 01-1-1V5a1 1 0 011-1zm1 2v10h16V6H4z"/></svg>
           </button>
         </div>
 

@@ -75,7 +75,8 @@ export const PeerProvider = ({ children }) => {
   const createOffer = useCallback(
     async (userId) => {
       try {
-        const pc = createPeerConnection(userId);
+        const existing = peersRef.current.get(userId);
+        const pc = existing || createPeerConnection(userId);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket?.emit('offer', { target: userId, offer });
@@ -89,7 +90,8 @@ export const PeerProvider = ({ children }) => {
   const handleOffer = useCallback(
     async (data) => {
       try {
-        const pc = createPeerConnection(data.sender);
+        const existing = peersRef.current.get(data.sender);
+        const pc = existing || createPeerConnection(data.sender);
         await pc.setRemoteDescription(data.offer);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
@@ -124,17 +126,25 @@ export const PeerProvider = ({ children }) => {
   const enableLocalVideoForPeers = useCallback(async (videoTrack) => {
     if (!videoTrack) return;
     peersRef.current.forEach((pc, userId) => {
-      const sender = pc.addTrack(videoTrack, localStream);
+      // try to reuse an existing video sender
+      let sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+      if (sender) {
+        sender.replaceTrack(videoTrack).catch(() => {});
+      } else {
+        sender = pc.addTrack(videoTrack, localStream);
+      }
       const arr = videoSendersRef.current.get(userId) || [];
-      videoSendersRef.current.set(userId, [...arr, sender]);
+      if (!arr.includes(sender)) videoSendersRef.current.set(userId, [...arr, sender]);
     });
   }, [localStream]);
 
   // Disable video: remove video senders from every peer
   const disableLocalVideoForPeers = useCallback(() => {
     peersRef.current.forEach((pc, userId) => {
-      const senders = videoSendersRef.current.get(userId) || [];
+      // prefer replaceTrack(null) to signal track stop
+      const senders = pc.getSenders().filter((s) => s.track && s.track.kind === 'video');
       senders.forEach((s) => {
+        try { s.replaceTrack(null); } catch {}
         try { pc.removeTrack(s); } catch {}
       });
       videoSendersRef.current.set(userId, []);

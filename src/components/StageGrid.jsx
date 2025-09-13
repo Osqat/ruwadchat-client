@@ -90,7 +90,7 @@ function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, isCurrent, o
       title={user.username}
     >
       {hasVideo ? (
-        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted={false} />
+        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline autoPlay muted />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center">
           <div
