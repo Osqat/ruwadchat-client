@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useMediaContext } from '../context/MediaProvider.jsx';
 
 // StageGrid: interactive participants area (video/avatars),
@@ -160,17 +159,10 @@ function FullscreenOverlay({ users, currentUser, fullscreenUserId, setFullscreen
   const hasVideo = !!stream && stream.getVideoTracks && stream.getVideoTracks().length > 0;
 
   useEffect(() => {
-    if (!stream || !hasVideo) {
-      setFullscreenUserId(null);
-      return;
-    }
-    const tracks = stream.getVideoTracks ? stream.getVideoTracks() : [];
-    const onEnded = () => setFullscreenUserId(null);
-    tracks.forEach((t) => t.addEventListener('ended', onEnded));
-    return () => tracks.forEach((t) => t.removeEventListener('ended', onEnded));
+    if (!stream || !hasVideo) setFullscreenUserId(null);
   }, [stream, hasVideo, setFullscreenUserId]);
 
-  const node = (
+  return (
     <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={() => setFullscreenUserId(null)}>
       <div className="absolute top-4 right-4">
         <button onClick={() => setFullscreenUserId(null)} className="btn-secondary">Close</button>
@@ -182,8 +174,14 @@ function FullscreenOverlay({ users, currentUser, fullscreenUserId, setFullscreen
             playsInline
             autoPlay
             muted
-            controls
-            ref={(el) => { if (el && el.srcObject !== stream) el.srcObject = stream; }}
+            ref={(el) => {
+              try {
+                if (el && el.srcObject !== stream) el.srcObject = stream;
+              } catch (e) {
+                // Prevent runtime crash if attaching fails
+                console.error('Failed to attach fullscreen video', e);
+              }
+            }}
           />
         ) : (
           <div className="text-white">No video</div>
@@ -194,6 +192,4 @@ function FullscreenOverlay({ users, currentUser, fullscreenUserId, setFullscreen
       </div>
     </div>
   );
-
-  return createPortal(node, document.body);
 }
