@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useMediaContext } from '../context/MediaProvider.jsx';
 
 const UserSidebar = ({ 
   users, 
@@ -8,11 +9,13 @@ const UserSidebar = ({
   onLeave,
   speakingUsers = new Set()
 }) => {
-  const [muteAll, setMuteAll] = useState(false);
+  const { muteAll } = useMediaContext();
+  const [muteAllEnabled, setMuteAllEnabled] = useState(false);
 
   const handleMuteAll = () => {
-    setMuteAll(!muteAll);
-    // This would be implemented to mute all remote audio
+    const next = !muteAllEnabled;
+    setMuteAllEnabled(next);
+    muteAll(next);
   };
 
   const MicIcon = ({ isMuted }) => (

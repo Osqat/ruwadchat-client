@@ -2,14 +2,15 @@ import { useState } from 'react';
 
 const JoinScreen = ({ onJoin }) => {
   const [username, setUsername] = useState('');
+  const [room, setRoom] = useState('general');
   const [isJoining, setIsJoining] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (username.trim() && !isJoining) {
+    if (username.trim() && room.trim() && !isJoining) {
       setIsJoining(true);
       try {
-        await onJoin(username.trim());
+        await onJoin({ username: username.trim(), room: room.trim() });
       } catch (error) {
         console.error('Error joining:', error);
         setIsJoining(false);
@@ -42,10 +43,27 @@ const JoinScreen = ({ onJoin }) => {
               autoFocus
             />
           </div>
+
+          <div>
+            <label htmlFor="room" className="block text-sm font-medium text-discord-light mb-2">
+              Room
+            </label>
+            <input
+              type="text"
+              id="room"
+              value={room}
+              onChange={(e) => setRoom(e.target.value)}
+              className="input-field w-full"
+              placeholder="general"
+              maxLength={30}
+              disabled={isJoining}
+            />
+            <p className="text-xs text-discord-light mt-1">Join any room name to chat with others.</p>
+          </div>
           
           <button
             type="submit"
-            disabled={!username.trim() || isJoining}
+            disabled={!username.trim() || !room.trim() || isJoining}
             className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isJoining ? 'Joining...' : 'Join Voice Chat'}

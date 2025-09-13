@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 
-const ChatPanel = ({ socket, messages, currentUser }) => {
+const ChatPanel = ({ socket, messages, currentUser, room = 'general', onReloadHistory }) => {
   const [newMessage, setNewMessage] = useState('');
+  const [typingUsers, setTypingUsers] = useState(new Set());
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -22,6 +23,42 @@ const ChatPanel = ({ socket, messages, currentUser }) => {
     }
   };
 
+  // Typing indicators
+  useEffect(() => {
+    if (!socket) return;
+    const onTyping = ({ userId }) => {
+      setTypingUsers((prev) => new Set(prev).add(userId));
+    };
+    const onStopTyping = ({ userId }) => {
+      setTypingUsers((prev) => {
+        const next = new Set(prev);
+        next.delete(userId);
+        return next;
+      });
+    };
+    socket.on('typing', onTyping);
+    socket.on('stop-typing', onStopTyping);
+    return () => {
+      socket.off('typing', onTyping);
+      socket.off('stop-typing', onStopTyping);
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handler = () => socket.emit('typing');
+    const stop = () => socket.emit('stop-typing');
+    if (newMessage.length > 0) handler(); else stop();
+    const t = setTimeout(stop, 1500);
+    return () => clearTimeout(t);
+  }, [newMessage, socket]);
+
+  // Reload history if room changes
+  useEffect(() => {
+    onReloadHistory && onReloadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
+
   const formatTime = (timestamp) => {
     try {
       return new Date(timestamp).toLocaleTimeString([], { 
@@ -40,7 +77,7 @@ const ChatPanel = ({ socket, messages, currentUser }) => {
       <div className="p-4 border-b border-gray-600">
         <h2 className="text-lg font-semibold text-white flex items-center">
           <span className="mr-2">#</span>
-          general
+          {room}
         </h2>
       </div>
 
@@ -109,6 +146,9 @@ const ChatPanel = ({ socket, messages, currentUser }) => {
             >
               Send
             </button>
+          </div>
+          <div className="h-5 mt-2 text-xs text-discord-light">
+            {typingUsers.size > 0 ? 'Someone is typing…' : ' '}
           </div>
         </form>
       </div>
