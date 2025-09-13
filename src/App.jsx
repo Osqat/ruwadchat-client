@@ -16,7 +16,7 @@ const AppInner = () => {
   const [error, setError] = useState(null);
 
   const { socket, isConnected, join, leave, currentUser, users, room, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus, emitDeafenStatus } = useSocketContext();
-  const { initializeAudio, isMuted, isSpeaking, toggleMute, toggleDeafen, isDeafened, isCameraOn, toggleCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream } = useMediaContext();
+  const { initializeAudio, isMuted, isSpeaking, toggleMute, toggleDeafen, isDeafened, isCameraOn, toggleCamera, disableCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream } = useMediaContext();
   const { remoteStreams, createOffer, cleanupPeer, cleanupAllPeers, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll } = usePeerContext();
 
   const loadChatHistory = useCallback(async () => {
@@ -107,6 +107,8 @@ const AppInner = () => {
   // Camera toggle with renegotiation
   const handleToggleCamera = useCallback(async () => {
     if (isCameraOn) {
+      // Stop local camera tracks and update local state
+      try { await disableCamera(); } catch {}
       disableLocalVideoForPeers();
       await renegotiateWithAll();
       emitVideoStatus(false);
@@ -118,7 +120,7 @@ const AppInner = () => {
         emitVideoStatus(true);
       }
     }
-  }, [isCameraOn, toggleCamera, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll, emitVideoStatus]);
+  }, [isCameraOn, toggleCamera, disableCamera, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll, emitVideoStatus]);
 
   const handleToggleScreenShare = useCallback(async () => {
     if (isScreenSharing) {
