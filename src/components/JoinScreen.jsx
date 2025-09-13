@@ -19,16 +19,16 @@ const JoinScreen = ({ onJoin }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-discord-darker">
-      <div className="bg-discord-dark p-8 rounded-lg shadow-xl w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-surface">
+      <div className="bg-surface-2 p-8 rounded-lg shadow-xl w-full max-w-md border border-border">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Ruwad Chat</h1>
-          <p className="text-discord-light">Enter your name to join the voice chat</p>
+          <p className="text-muted">Enter your name to join the voice chat</p>
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-discord-light mb-2">
+            <label htmlFor="username" className="block text-sm font-medium text-muted mb-2">
               Username
             </label>
             <input
@@ -45,7 +45,7 @@ const JoinScreen = ({ onJoin }) => {
           </div>
 
           <div>
-            <label htmlFor="room" className="block text-sm font-medium text-discord-light mb-2">
+            <label htmlFor="room" className="block text-sm font-medium text-muted mb-2">
               Room
             </label>
             <input
@@ -58,7 +58,7 @@ const JoinScreen = ({ onJoin }) => {
               maxLength={30}
               disabled={isJoining}
             />
-            <p className="text-xs text-discord-light mt-1">Join any room name to chat with others.</p>
+            <p className="text-xs text-muted mt-1">Join any room name to chat with others.</p>
           </div>
           
           <button
@@ -71,7 +71,7 @@ const JoinScreen = ({ onJoin }) => {
         </form>
         
         <div className="mt-6 text-center">
-          <p className="text-xs text-discord-light">
+          <p className="text-xs text-muted">
             Make sure your microphone is working and you have a stable internet connection
           </p>
         </div>

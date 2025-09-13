@@ -72,9 +72,9 @@ const ChatPanel = ({ socket, messages, currentUser, room = 'general', onReloadHi
   };
 
   return (
-    <div className="flex flex-col h-full bg-discord-dark">
+    <div className="flex flex-col h-full bg-surface-2">
       {/* Chat Header */}
-      <div className="p-4 border-b border-gray-600">
+      <div className="p-4 border-b border-border">
         <h2 className="text-lg font-semibold text-white flex items-center">
           <span className="mr-2">#</span>
           {room}
@@ -84,7 +84,7 @@ const ChatPanel = ({ socket, messages, currentUser, room = 'general', onReloadHi
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {messages.length === 0 ? (
-          <div className="text-center text-discord-light py-8">
+          <div className="text-center text-muted py-8">
             <p>No messages yet. Start the conversation!</p>
           </div>
         ) : (
@@ -112,7 +112,7 @@ const ChatPanel = ({ socket, messages, currentUser, room = 'general', onReloadHi
                       >
                         {username}
                       </span>
-                      <span className="text-xs text-discord-light">
+                      <span className="text-xs text-muted">
                         {timestamp ? formatTime(timestamp) : 'No Time'}
                       </span>
                     </div>
@@ -127,7 +127,7 @@ const ChatPanel = ({ socket, messages, currentUser, room = 'general', onReloadHi
       </div>
 
       {/* Message Input */}
-      <div className="p-4 border-t border-gray-600">
+      <div className="p-4 border-t border-border">
         <form onSubmit={handleSubmit}>
           <div className="flex space-x-2">
             <input

@@ -18,6 +18,8 @@ export const SocketProvider = ({ children }) => {
   const [users, setUsers] = useState([]);
   const [room, setRoom] = useState('general');
   const [speakingUsers, setSpeakingUsers] = useState(new Set());
+  const [videoUsers, setVideoUsers] = useState(new Set());
+  const [deafenedUsers, setDeafenedUsers] = useState(new Set());
   const reconnectTimeoutRef = useRef(null);
 
   // Setup socket connection once
@@ -83,11 +85,33 @@ export const SocketProvider = ({ children }) => {
       });
     };
 
+    const onVideoStatus = (data) => {
+      setVideoUsers((prev) => {
+        const next = new Set(prev);
+        if (data.enabled) next.add(data.userId);
+        else next.delete(data.userId);
+        return next;
+      });
+      // reflect on users array too
+      setUsers((prev) => prev.map((u) => (u.id === data.userId ? { ...u, videoEnabled: data.enabled } : u)));
+    };
+
+    const onDeafenStatus = (data) => {
+      setDeafenedUsers((prev) => {
+        const next = new Set(prev);
+        if (data.isDeafened) next.add(data.userId);
+        else next.delete(data.userId);
+        return next;
+      });
+    };
+
     socket.on('user-joined', onUserJoined);
     socket.on('user-connected', onUserConnected);
     socket.on('user-disconnected', onUserDisconnected);
     socket.on('user-mic-status', onMicStatus);
     socket.on('user-speaking-status', onSpeakingStatus);
+    socket.on('user-video-status', onVideoStatus);
+    socket.on('user-deafen-status', onDeafenStatus);
 
     return () => {
       socket.off('user-joined', onUserJoined);
@@ -95,6 +119,8 @@ export const SocketProvider = ({ children }) => {
       socket.off('user-disconnected', onUserDisconnected);
       socket.off('user-mic-status', onMicStatus);
       socket.off('user-speaking-status', onSpeakingStatus);
+      socket.off('user-video-status', onVideoStatus);
+      socket.off('user-deafen-status', onDeafenStatus);
     };
   }, [socket]);
 
@@ -133,6 +159,9 @@ export const SocketProvider = ({ children }) => {
   const typing = useCallback(() => socket && socket.emit('typing'), [socket]);
   const stopTyping = useCallback(() => socket && socket.emit('stop-typing'), [socket]);
 
+  const emitVideoStatus = useCallback((enabled) => socket && socket.emit('video-status', enabled), [socket]);
+  const emitDeafenStatus = useCallback((isDeafened) => socket && socket.emit('deafen-status', isDeafened), [socket]);
+
   const value = useMemo(
     () => ({
       socket,
@@ -148,10 +177,13 @@ export const SocketProvider = ({ children }) => {
       users,
       room,
       speakingUsers,
+      videoUsers,
+      deafenedUsers,
+      emitVideoStatus,
+      emitDeafenStatus,
     }),
-    [socket, isConnected, join, leave, emitMicStatus, emitSpeakingStatus, sendMessage, typing, stopTyping, currentUser, users, room, speakingUsers]
+    [socket, isConnected, join, leave, emitMicStatus, emitSpeakingStatus, sendMessage, typing, stopTyping, currentUser, users, room, speakingUsers, videoUsers, deafenedUsers, emitVideoStatus, emitDeafenStatus]
   );
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
 };
-

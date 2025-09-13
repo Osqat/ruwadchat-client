@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import JoinScreen from './components/JoinScreen';
 import ChatPanel from './components/ChatPanel';
+import StageGrid from './components/StageGrid.jsx';
 import UserSidebar from './components/UserSidebar';
 import { SocketProvider, useSocketContext } from './context/SocketProvider.jsx';
 import { MediaProvider, useMediaContext } from './context/MediaProvider.jsx';
@@ -13,9 +14,9 @@ const AppInner = () => {
   const [messages, setMessages] = useState([]);
   const [error, setError] = useState(null);
 
-  const { socket, isConnected, join, leave, currentUser, users, room, emitMicStatus, emitSpeakingStatus, speakingUsers } = useSocketContext();
-  const { initializeAudio, isMuted, isSpeaking, toggleMute, createAudioElement, removeAudioElement } = useMediaContext();
-  const { remoteStreams, createOffer, cleanupPeer, cleanupAllPeers } = usePeerContext();
+  const { socket, isConnected, join, leave, currentUser, users, room, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus, emitDeafenStatus } = useSocketContext();
+  const { initializeAudio, isMuted, isSpeaking, toggleMute, toggleDeafen, isDeafened, isCameraOn, toggleCamera, createAudioElement, attachRemoteStream, removeAudioElement, localStream } = useMediaContext();
+  const { remoteStreams, createOffer, cleanupPeer, cleanupAllPeers, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll } = usePeerContext();
 
   const loadChatHistory = useCallback(async () => {
     try {
@@ -60,10 +61,13 @@ const AppInner = () => {
     return () => socket.off('user-connected', onUserConnected);
   }, [socket, createOffer]);
 
-  // Handle remote streams to audio elements
+  // Handle remote streams to audio elements and gain chain
   useEffect(() => {
-    remoteStreams.forEach((stream, userId) => createAudioElement(userId, stream));
-  }, [remoteStreams, createAudioElement]);
+    remoteStreams.forEach((stream, userId) => {
+      createAudioElement(userId, stream);
+      attachRemoteStream(userId, stream);
+    });
+  }, [remoteStreams, createAudioElement, attachRemoteStream]);
 
   // Remove audio and peer on user-disconnected
   useEffect(() => {
@@ -91,6 +95,29 @@ const AppInner = () => {
     toggleMute();
     emitMicStatus(!isMuted);
   }, [toggleMute, emitMicStatus, isMuted]);
+
+  // Deafen toggle (auto-mutes when enabled)
+  const handleToggleDeafen = useCallback(() => {
+    toggleDeafen();
+    // Report current status after state change on next tick
+    setTimeout(() => emitDeafenStatus(!isDeafened), 0);
+  }, [toggleDeafen, emitDeafenStatus, isDeafened]);
+
+  // Camera toggle with renegotiation
+  const handleToggleCamera = useCallback(async () => {
+    if (isCameraOn) {
+      disableLocalVideoForPeers();
+      await renegotiateWithAll();
+      emitVideoStatus(false);
+    } else {
+      const track = await toggleCamera();
+      if (track) {
+        await enableLocalVideoForPeers(track);
+        await renegotiateWithAll();
+        emitVideoStatus(true);
+      }
+    }
+  }, [isCameraOn, toggleCamera, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll, emitVideoStatus]);
 
   // Speaking status propagation
   useEffect(() => {
@@ -124,24 +151,31 @@ const AppInner = () => {
   if (!hasJoined) return <JoinScreen onJoin={handleJoin} />;
 
   return (
-    <div className="h-screen flex bg-discord-darker">
+    <div className="h-screen flex bg-surface">
       <ConnectionStatus />
       <UserSidebar
         users={users}
         currentUser={currentUser}
         isMuted={isMuted}
         onToggleMute={handleToggleMute}
+        onToggleDeafen={handleToggleDeafen}
+        isDeafened={isDeafened}
+        onToggleCamera={handleToggleCamera}
+        isCameraOn={isCameraOn}
         onLeave={handleLeave}
         speakingUsers={speakingUsers}
       />
-      <div className="flex-1 hidden md:flex items-center justify-center text-discord-light">
-        <div className="text-center p-6 max-w-md">
-          <h2 className="text-2xl font-semibold text-white mb-2">Voice Room</h2>
-          <p className="mb-4">You’re connected to <span className="font-mono">{room}</span>. Speak to light up your avatar. Use the right panel for text chat.</p>
-          <p className="text-sm">On mobile, the chat appears below.</p>
-        </div>
+      <div className="flex-1 overflow-hidden">
+        <StageGrid
+          users={users}
+          currentUser={currentUser}
+          remoteStreams={remoteStreams}
+          localStream={localStream}
+          speakingUsers={speakingUsers}
+          localSpeaking={isSpeaking}
+        />
       </div>
-      <div className="w-full md:w-[420px] border-l border-gray-700">
+      <div className="w-full md:w-[420px] border-l border-border bg-surface-2">
         <ChatPanel socket={socket} messages={messages} currentUser={currentUser} room={room} onReloadHistory={loadChatHistory} />
       </div>
     </div>

@@ -14,7 +14,12 @@ export default {
           blurple: '#7289DA',
           green: '#43B581',
           red: '#F04747'
-        }
+        },
+        surface: '#0B0F14',
+        'surface-2': '#0E131A',
+        border: '#1B212B',
+        muted: '#8792A2',
+        accent: '#22D3EE'
       }
     },
   },

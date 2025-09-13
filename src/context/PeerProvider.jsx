@@ -18,6 +18,7 @@ export const PeerProvider = ({ children }) => {
   const [remoteStreams, setRemoteStreams] = useState(new Map());
   const peersRef = useRef(new Map());
   const remoteStreamsRef = useRef(new Map());
+  const videoSendersRef = useRef(new Map()); // userId -> RTCRtpSender[] for video
 
   const iceServers = { iceServers: [ { urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' } ] };
 
@@ -101,9 +102,46 @@ export const PeerProvider = ({ children }) => {
     peersRef.current.forEach((pc) => pc.close());
     peersRef.current.clear();
     remoteStreamsRef.current.clear();
+    videoSendersRef.current.clear();
     setPeers(new Map());
     setRemoteStreams(new Map());
   }, []);
+
+  // Enable video by adding track to every peer and renegotiating
+  const enableLocalVideoForPeers = useCallback(async (videoTrack) => {
+    if (!videoTrack) return;
+    peersRef.current.forEach((pc, userId) => {
+      const sender = pc.addTrack(videoTrack, localStream);
+      const arr = videoSendersRef.current.get(userId) || [];
+      videoSendersRef.current.set(userId, [...arr, sender]);
+    });
+  }, [localStream]);
+
+  // Disable video: remove video senders from every peer
+  const disableLocalVideoForPeers = useCallback(() => {
+    peersRef.current.forEach((pc, userId) => {
+      const senders = videoSendersRef.current.get(userId) || [];
+      senders.forEach((s) => {
+        try { pc.removeTrack(s); } catch {}
+      });
+      videoSendersRef.current.set(userId, []);
+    });
+  }, []);
+
+  // Renegotiate with all peers
+  const renegotiateWithAll = useCallback(async () => {
+    await Promise.all(Array.from(peersRef.current.keys()).map((uid) => (async () => {
+      try {
+        const pc = peersRef.current.get(uid);
+        if (!pc) return;
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket?.emit('offer', { target: uid, offer });
+      } catch (e) {
+        console.error('Renegotiate error:', e);
+      }
+    })()));
+  }, [socket]);
 
   useEffect(() => {
     if (!socket) return;
@@ -118,10 +156,18 @@ export const PeerProvider = ({ children }) => {
   }, [socket, handleOffer, handleAnswer, handleIceCandidate]);
 
   const value = useMemo(
-    () => ({ peers, remoteStreams, createOffer, cleanupPeer, cleanupAllPeers }),
-    [peers, remoteStreams, createOffer, cleanupPeer, cleanupAllPeers]
+    () => ({
+      peers,
+      remoteStreams,
+      createOffer,
+      cleanupPeer,
+      cleanupAllPeers,
+      enableLocalVideoForPeers,
+      disableLocalVideoForPeers,
+      renegotiateWithAll,
+    }),
+    [peers, remoteStreams, createOffer, cleanupPeer, cleanupAllPeers, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll]
   );
 
   return <PeerContext.Provider value={value}>{children}</PeerContext.Provider>;
 };
-

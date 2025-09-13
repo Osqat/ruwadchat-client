@@ -12,11 +12,16 @@ export const MediaProvider = ({ children }) => {
   const [localStream, setLocalStream] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isDeafened, setIsDeafened] = useState(false);
+  const [isCameraOn, setIsCameraOn] = useState(false);
   const [audioElements, setAudioElements] = useState(new Map());
   const audioElementsRef = useRef(new Map());
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const speakingTimeoutRef = useRef(null);
+  const masterGainRef = useRef(null);
+  const remoteGainsRef = useRef(new Map()); // userId -> {source, gain}
+  const preDeafenMutedRef = useRef(false);
 
   const initializeAudio = useCallback(async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -26,10 +31,16 @@ export const MediaProvider = ({ children }) => {
     setLocalStream(stream);
 
     // speaking detection
-    audioContextRef.current = new AudioContext();
+    audioContextRef.current = audioContextRef.current || new AudioContext();
     analyserRef.current = audioContextRef.current.createAnalyser();
     const source = audioContextRef.current.createMediaStreamSource(stream);
     source.connect(analyserRef.current);
+    // master gain for remote playback, default boosted for clarity
+    if (!masterGainRef.current) {
+      masterGainRef.current = audioContextRef.current.createGain();
+      masterGainRef.current.gain.value = 1.6; // default boost to address low volume
+      masterGainRef.current.connect(audioContextRef.current.destination);
+    }
     analyserRef.current.fftSize = 256;
     const bufferLength = analyserRef.current.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
@@ -63,12 +74,38 @@ export const MediaProvider = ({ children }) => {
     audio.srcObject = stream;
     audio.autoplay = true;
     audio.playsInline = true;
+    audio.volume = 0; // we will route audio through WebAudio for gain control
     audio.addEventListener('loadedmetadata', () => {
       audio.play().catch(() => {});
     });
     audioElementsRef.current.set(userId, audio);
     setAudioElements(new Map(audioElementsRef.current));
     return audio;
+  }, []);
+
+  // Attach remote stream to WebAudio graph with per-user gain
+  const attachRemoteStream = useCallback((userId, stream) => {
+    if (!audioContextRef.current || !masterGainRef.current || !stream) return;
+    // If exists, disconnect old
+    const existing = remoteGainsRef.current.get(userId);
+    if (existing) {
+      try { existing.source.disconnect(); existing.gain.disconnect(); } catch { /* noop */ }
+    }
+    const source = audioContextRef.current.createMediaStreamSource(stream);
+    const gain = audioContextRef.current.createGain();
+    gain.gain.value = 1.0; // per-remote gain; masterGain applies overall boost
+    source.connect(gain);
+    gain.connect(masterGainRef.current);
+    remoteGainsRef.current.set(userId, { source, gain });
+  }, []);
+
+  const setRemoteGain = useCallback((userId, value) => {
+    const entry = remoteGainsRef.current.get(userId);
+    if (entry) entry.gain.gain.value = value;
+  }, []);
+
+  const setMasterGain = useCallback((value) => {
+    if (masterGainRef.current) masterGainRef.current.gain.value = value;
   }, []);
 
   const removeAudioElement = useCallback((userId) => {
@@ -79,10 +116,17 @@ export const MediaProvider = ({ children }) => {
       audioElementsRef.current.delete(userId);
       setAudioElements(new Map(audioElementsRef.current));
     }
+    const nodes = remoteGainsRef.current.get(userId);
+    if (nodes) {
+      try { nodes.source.disconnect(); nodes.gain.disconnect(); } catch { /* noop */ }
+      remoteGainsRef.current.delete(userId);
+    }
   }, []);
 
   const muteAll = useCallback((muted) => {
-    audioElementsRef.current.forEach((audio) => (audio.volume = muted ? 0 : 1));
+    remoteGainsRef.current.forEach((entry) => {
+      entry.gain.gain.value = muted ? 0 : 1.0;
+    });
   }, []);
 
   const cleanup = useCallback(() => {
@@ -90,10 +134,7 @@ export const MediaProvider = ({ children }) => {
       localStream.getTracks().forEach((t) => t.stop());
       setLocalStream(null);
     }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
+    // keep audio context alive for user interactions; do not close to avoid autoplay issues
     if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
     audioElementsRef.current.forEach((a) => {
       a.pause();
@@ -101,26 +142,79 @@ export const MediaProvider = ({ children }) => {
     });
     audioElementsRef.current.clear();
     setAudioElements(new Map());
+    remoteGainsRef.current.forEach((n) => { try { n.source.disconnect(); n.gain.disconnect(); } catch{} });
+    remoteGainsRef.current.clear();
   }, [localStream]);
 
   useEffect(() => () => cleanup(), [cleanup]);
+
+  // Deafen: mutes mic and silences remote via master gain
+  const toggleDeafen = useCallback(() => {
+    const next = !isDeafened;
+    if (next) {
+      preDeafenMutedRef.current = isMuted;
+      // ensure mic muted
+      if (!isMuted) toggleMute();
+      setMasterGain(0);
+    } else {
+      // restore master gain and previous mic state (stay muted if was muted before)
+      setMasterGain(1.6);
+      if (!preDeafenMutedRef.current && isMuted) toggleMute();
+    }
+    setIsDeafened(next);
+  }, [isDeafened, isMuted, toggleMute, setMasterGain]);
+
+  // Camera controls
+  const enableCamera = useCallback(async () => {
+    if (!localStream) return null;
+    if (isCameraOn) return localStream.getVideoTracks()[0] || null;
+    const cam = await navigator.mediaDevices.getUserMedia({ video: true });
+    const videoTrack = cam.getVideoTracks()[0];
+    if (videoTrack) {
+      localStream.addTrack(videoTrack);
+      setIsCameraOn(true);
+    }
+    return videoTrack || null;
+  }, [localStream, isCameraOn]);
+
+  const disableCamera = useCallback(() => {
+    if (!localStream) return;
+    localStream.getVideoTracks().forEach((t) => { t.stop(); localStream.removeTrack(t); });
+    setIsCameraOn(false);
+  }, [localStream]);
+
+  const toggleCamera = useCallback(async () => {
+    if (isCameraOn) {
+      disableCamera();
+      return null;
+    }
+    return await enableCamera();
+  }, [isCameraOn, enableCamera, disableCamera]);
 
   const value = useMemo(
     () => ({
       localStream,
       isMuted,
       isSpeaking,
+      isDeafened,
+      isCameraOn,
       audioElements,
       initializeAudio,
       toggleMute,
+      toggleDeafen,
+      enableCamera,
+      disableCamera,
+      toggleCamera,
       createAudioElement,
+      attachRemoteStream,
       removeAudioElement,
       muteAll,
+      setRemoteGain,
+      setMasterGain,
       cleanup,
     }),
-    [localStream, isMuted, isSpeaking, audioElements, initializeAudio, toggleMute, createAudioElement, removeAudioElement, muteAll, cleanup]
+    [localStream, isMuted, isSpeaking, isDeafened, isCameraOn, audioElements, initializeAudio, toggleMute, toggleDeafen, enableCamera, disableCamera, toggleCamera, createAudioElement, attachRemoteStream, removeAudioElement, muteAll, setRemoteGain, setMasterGain, cleanup]
   );
 
   return <MediaContext.Provider value={value}>{children}</MediaContext.Provider>;
 };
-

@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-discord-darker text-white font-sans;
+    @apply bg-surface text-white font-sans;
   }
 }
 
@@ -14,7 +14,7 @@
   }
   
   .btn-secondary {
-    @apply bg-discord-dark hover:bg-gray-600 text-white font-medium py-2 px-4 rounded transition-colors;
+    @apply bg-surface-2 hover:bg-surface text-white font-medium py-2 px-4 rounded transition-colors border border-border;
   }
   
   .btn-danger {
@@ -26,7 +26,7 @@
   }
   
   .input-field {
-    @apply bg-discord-dark border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-discord-blurple;
+    @apply bg-surface-2 border border-border rounded px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-discord-blurple;
   }
   
   .chat-message {
@@ -34,12 +34,18 @@
   }
   
   .user-item {
-    @apply flex items-center p-2 rounded hover:bg-discord-dark transition-colors;
+    @apply flex items-center p-2 rounded hover:bg-surface transition-colors border border-transparent;
   }
-  
+
   .speaking {
     @apply ring-2 ring-discord-green;
   }
+}
+
+/* Stage auto grid for responsive tiles */
+.auto-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 /* Custom scrollbar */
