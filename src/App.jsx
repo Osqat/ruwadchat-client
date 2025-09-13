@@ -124,6 +124,8 @@ const AppInner = () => {
 
   const handleToggleScreenShare = useCallback(async () => {
     if (isScreenSharing) {
+      // stop local screen tracks first so our tile reverts immediately
+      try { await toggleScreenShare(); } catch {}
       disableLocalVideoForPeers();
       await renegotiateWithAll();
       emitVideoStatus(false);
@@ -136,6 +138,19 @@ const AppInner = () => {
       }
     }
   }, [isScreenSharing, toggleScreenShare, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll, emitVideoStatus]);
+
+  // If screen share ends from browser UI (track.onended), ensure peers are updated
+  useEffect(() => {
+    // on transition true -> false
+    // using a ref to store previous state is optional; idempotent ops are safe here
+    if (!isScreenSharing) {
+      (async () => {
+        disableLocalVideoForPeers();
+        await renegotiateWithAll();
+        emitVideoStatus(false);
+      })();
+    }
+  }, [isScreenSharing, disableLocalVideoForPeers, renegotiateWithAll, emitVideoStatus]);
 
   // Speaking status propagation
   useEffect(() => {

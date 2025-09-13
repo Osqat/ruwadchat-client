@@ -221,11 +221,10 @@ export const MediaProvider = ({ children }) => {
 
   const disableScreenShare = useCallback(() => {
     if (!localStream) return;
+    // Remove ALL video tracks to ensure no stale black video frames
     localStream.getVideoTracks().forEach((t) => {
-      if (t.label.toLowerCase().includes('screen') || t.label.toLowerCase().includes('display')) {
-        try { t.stop(); } catch {}
-        localStream.removeTrack(t);
-      }
+      try { t.stop(); } catch {}
+      try { localStream.removeTrack(t); } catch {}
     });
     setIsScreenSharing(false);
   }, [localStream]);
