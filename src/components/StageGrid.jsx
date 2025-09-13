@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import ReactDOM from 'react-dom';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useMediaContext } from '../context/MediaProvider.jsx';
 
 // StageGrid: interactive participants area (video/avatars),
@@ -11,9 +10,9 @@ export default function StageGrid({
   localStream,
   speakingUsers = new Set(),
   localSpeaking = false,
+  onTileClick,
 }) {
   const { setRemoteGain } = useMediaContext();
-  const [fullscreenUserId, setFullscreenUserId] = useState(null);
   // Precompute a lookup of userId -> media stream
   const streamByUserId = useMemo(() => {
     const m = new Map(remoteStreams);
@@ -58,18 +57,10 @@ export default function StageGrid({
             sizeClass={tileSizeClass}
             isCurrent={isCurrent}
             onVolume={(v) => !isCurrent && setRemoteGain(u.id, v)}
-            onClick={() => hasVideo && setFullscreenUserId(u.id)}
+            onClick={() => onTileClick?.(u)}
           />
         );
       })}
-      <FullscreenOverlay
-        users={users}
-        currentUser={currentUser}
-        fullscreenUserId={fullscreenUserId}
-        setFullscreenUserId={setFullscreenUserId}
-        remoteStreams={remoteStreams}
-        localStream={localStream}
-      />
     </div>
   );
 }
@@ -92,9 +83,9 @@ function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, isCurrent, o
 
   return (
     <div
-      className={`group relative rounded-lg bg-surface-2 border border-border shadow-sm overflow-hidden ${
-        hasVideo ? 'cursor-pointer' : 'cursor-default'
-      } select-none ${isSpeaking ? 'ring-2 ring-accent/70' : ''} ${sizeClass}`}
+      className={`relative rounded-lg bg-surface-2 border border-border shadow-sm overflow-hidden cursor-pointer select-none ${
+        isSpeaking ? 'ring-2 ring-accent/70' : ''
+      } ${sizeClass}`}
       onClick={onClick}
       title={user.username}
     >
@@ -108,11 +99,6 @@ function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, isCurrent, o
           >
             {user.username?.charAt(0)?.toUpperCase()}
           </div>
-        </div>
-      )}
-      {hasVideo && (
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <span className="text-white text-sm tracking-wide">Fullscreen</span>
         </div>
       )}
       <div className="absolute left-0 right-0 bottom-0 p-2 bg-gradient-to-t from-black/60 to-transparent">
@@ -143,57 +129,4 @@ function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, isCurrent, o
       </div>
     </div>
   );
-}
-
-function FullscreenOverlay({ users, currentUser, fullscreenUserId, setFullscreenUserId, remoteStreams, localStream }) {
-  useEffect(() => {
-    if (!fullscreenUserId) return;
-    const onKey = (e) => { if (e.key === 'Escape') setFullscreenUserId(null); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [fullscreenUserId, setFullscreenUserId]);
-
-  if (!fullscreenUserId) return null;
-
-  const user = users.find((u) => u.id === fullscreenUserId);
-  const stream = fullscreenUserId === currentUser?.id ? localStream : remoteStreams.get(fullscreenUserId);
-  const hasVideo = !!stream && stream.getVideoTracks && stream.getVideoTracks().length > 0;
-
-  useEffect(() => {
-    if (!stream || !hasVideo) {
-      setFullscreenUserId(null);
-      return;
-    }
-    const tracks = stream.getVideoTracks ? stream.getVideoTracks() : [];
-    const onEnded = () => setFullscreenUserId(null);
-    tracks.forEach((t) => t.addEventListener('ended', onEnded));
-    return () => tracks.forEach((t) => t.removeEventListener('ended', onEnded));
-  }, [stream, hasVideo, setFullscreenUserId]);
-
-  const node = (
-    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={() => setFullscreenUserId(null)}>
-      <div className="absolute top-4 right-4">
-        <button onClick={() => setFullscreenUserId(null)} className="btn-secondary">Close</button>
-      </div>
-      <div className="max-w-[95vw] max-h-[90vh] w-full h-full flex items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
-        {hasVideo ? (
-          <video
-            className="w-auto h-auto max-w-full max-h-full rounded"
-            playsInline
-            autoPlay
-            muted
-            controls
-            ref={(el) => { if (el && el.srcObject !== stream) el.srcObject = stream; }}
-          />
-        ) : (
-          <div className="text-white">No video</div>
-        )}
-      </div>
-      <div className="absolute bottom-4 left-4 text-white text-sm opacity-80">
-        {user?.username}
-      </div>
-    </div>
-  );
-
-  return ReactDOM.createPortal(node, document.body);
 }
