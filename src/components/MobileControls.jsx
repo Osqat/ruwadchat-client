@@ -21,9 +21,6 @@ export default function MobileControls({
       <IconButton active={isCameraOn} onClick={onToggleCamera} title={isCameraOn ? 'Camera Off' : 'Camera On'}>
         <CameraIcon on={isCameraOn} />
       </IconButton>
-      <IconButton active={isScreenSharing} onClick={onToggleScreenShare} title={isScreenSharing ? 'Stop Share' : 'Share Screen'}>
-        <ScreenIcon on={isScreenSharing} />
-      </IconButton>
     </div>
   );
 }
@@ -64,9 +61,4 @@ function CameraIcon({ on }) {
   );
 }
 
-function ScreenIcon() {
-  return (
-    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18a1 1 0 011 1v12a1 1 0 01-1 1h-7v2h3v2H8v-2h3v-2H3a1 1 0 01-1-1V5a1 1 0 011-1zm1 2v10h16V6H4z"/></svg>
-  );
-}
-
+// Screen share button intentionally omitted on mobile per current requirements
