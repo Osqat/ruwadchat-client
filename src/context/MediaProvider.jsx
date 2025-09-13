@@ -20,8 +20,10 @@ export const MediaProvider = ({ children }) => {
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const speakingTimeoutRef = useRef(null);
-  const masterGainRef = useRef(null);
-  const remoteGainsRef = useRef(new Map()); // userId -> {source, gain}
+  // Master/remote volumes using simple HTMLAudio volume path for reliability
+  const masterVolumeRef = useRef(1.0);
+  const remoteVolumesRef = useRef(new Map()); // userId -> volume (0..2)
+  const masterGainRef = useRef(null); // kept for local speaking detection context only
   const preDeafenMutedRef = useRef(false);
   const globalMuteRef = useRef(false);
   const isMobileDevice = useMemo(() => {
@@ -76,42 +78,41 @@ export const MediaProvider = ({ children }) => {
   }, [localStream]);
 
   const createAudioElement = useCallback((userId, stream) => {
-    const audio = new Audio();
+    let audio = audioElementsRef.current.get(userId);
+    if (!audio) {
+      audio = new Audio();
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audioElementsRef.current.set(userId, audio);
+    }
     audio.srcObject = stream;
-    audio.autoplay = true;
-    audio.playsInline = true;
-    audio.volume = 0; // we will route audio through WebAudio for gain control
-    audio.addEventListener('loadedmetadata', () => {
-      audio.play().catch(() => {});
-    });
-    audioElementsRef.current.set(userId, audio);
+    const rv = remoteVolumesRef.current.get(userId) ?? 1.0;
+    audio.volume = globalMuteRef.current ? 0 : Math.max(0, Math.min(2, rv)) * masterVolumeRef.current;
+    const play = () => audio.play().catch(() => {});
+    audio.addEventListener('loadedmetadata', play, { once: true });
     setAudioElements(new Map(audioElementsRef.current));
     return audio;
   }, []);
 
-  // Attach remote stream to WebAudio graph with per-user gain
-  const attachRemoteStream = useCallback((userId, stream) => {
-    if (!audioContextRef.current || !masterGainRef.current || !stream) return;
-    // If exists, disconnect old
-    const existing = remoteGainsRef.current.get(userId);
-    if (existing) {
-      try { existing.source.disconnect(); existing.gain.disconnect(); } catch { /* noop */ }
-    }
-    const source = audioContextRef.current.createMediaStreamSource(stream);
-    const gain = audioContextRef.current.createGain();
-    gain.gain.value = globalMuteRef.current ? 0 : 1.0; // respect global mute state
-    source.connect(gain);
-    gain.connect(masterGainRef.current);
-    remoteGainsRef.current.set(userId, { source, gain });
+  // Attach remote stream (no-op now; audio element handles playback)
+  const attachRemoteStream = useCallback((_userId, _stream) => {
+    // Intentionally left blank — we rely on HTMLAudioElement for playback
   }, []);
 
   const setRemoteGain = useCallback((userId, value) => {
-    const entry = remoteGainsRef.current.get(userId);
-    if (entry) entry.gain.gain.value = value;
+    remoteVolumesRef.current.set(userId, value);
+    const audio = audioElementsRef.current.get(userId);
+    if (audio) {
+      audio.volume = globalMuteRef.current ? 0 : Math.max(0, Math.min(2, value)) * masterVolumeRef.current;
+    }
   }, []);
 
   const setMasterGain = useCallback((value) => {
-    if (masterGainRef.current) masterGainRef.current.gain.value = value;
+    masterVolumeRef.current = value;
+    audioElementsRef.current.forEach((audio, userId) => {
+      const rv = remoteVolumesRef.current.get(userId) ?? 1.0;
+      audio.volume = globalMuteRef.current ? 0 : Math.max(0, Math.min(2, rv)) * value;
+    });
   }, []);
 
   const removeAudioElement = useCallback((userId) => {
@@ -122,17 +123,13 @@ export const MediaProvider = ({ children }) => {
       audioElementsRef.current.delete(userId);
       setAudioElements(new Map(audioElementsRef.current));
     }
-    const nodes = remoteGainsRef.current.get(userId);
-    if (nodes) {
-      try { nodes.source.disconnect(); nodes.gain.disconnect(); } catch { /* noop */ }
-      remoteGainsRef.current.delete(userId);
-    }
   }, []);
 
   const muteAll = useCallback((muted) => {
     globalMuteRef.current = !!muted;
-    remoteGainsRef.current.forEach((entry) => {
-      entry.gain.gain.value = muted ? 0 : 1.0;
+    audioElementsRef.current.forEach((audio, userId) => {
+      const rv = remoteVolumesRef.current.get(userId) ?? 1.0;
+      audio.volume = muted ? 0 : Math.max(0, Math.min(2, rv)) * masterVolumeRef.current;
     });
   }, []);
 
@@ -149,8 +146,7 @@ export const MediaProvider = ({ children }) => {
     });
     audioElementsRef.current.clear();
     setAudioElements(new Map());
-    remoteGainsRef.current.forEach((n) => { try { n.source.disconnect(); n.gain.disconnect(); } catch{} });
-    remoteGainsRef.current.clear();
+    remoteVolumesRef.current.clear();
   }, [localStream]);
 
   useEffect(() => () => cleanup(), [cleanup]);
