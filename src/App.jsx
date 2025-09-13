@@ -107,8 +107,6 @@ const AppInner = () => {
   // Camera toggle with renegotiation
   const handleToggleCamera = useCallback(async () => {
     if (isCameraOn) {
-      // fully remove local tracks and stop sending to peers
-      disableCamera();
       disableLocalVideoForPeers();
       await renegotiateWithAll();
       emitVideoStatus(false);
@@ -124,8 +122,6 @@ const AppInner = () => {
 
   const handleToggleScreenShare = useCallback(async () => {
     if (isScreenSharing) {
-      // fully remove local tracks and stop sending to peers
-      disableScreenShare();
       disableLocalVideoForPeers();
       await renegotiateWithAll();
       emitVideoStatus(false);
