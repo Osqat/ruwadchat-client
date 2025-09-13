@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import ReactDOM from 'react-dom';
+import { createPortal } from 'react-dom';
 import { useMediaContext } from '../context/MediaProvider.jsx';
 
 // StageGrid: interactive participants area (video/avatars),
@@ -195,5 +195,5 @@ function FullscreenOverlay({ users, currentUser, fullscreenUserId, setFullscreen
     </div>
   );
 
-  return ReactDOM.createPortal(node, document.body);
+  return createPortal(node, document.body);
 }
