@@ -71,7 +71,7 @@ export default function StageGrid({
       {users.map((u) => {
         const stream = streamByUserId.get(u.id);
         const isSpeaking = isSpeakingUser(u.id);
-        const hasVideo = !!stream && stream.getVideoTracks && stream.getVideoTracks().length > 0;
+        const hasVideo = !!stream && typeof stream.getVideoTracks === 'function' && stream.getVideoTracks().some(t => t.readyState === 'live');
         const isCurrent = currentUser?.id === u.id;
         return (
           <StageTile
@@ -155,3 +155,5 @@ function StageTile({ user, stream, hasVideo, isSpeaking, isCurrent, onVolume }) 
     </div>
   );
 }
+
+

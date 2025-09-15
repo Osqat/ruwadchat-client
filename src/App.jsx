@@ -13,8 +13,8 @@ const AppInner = () => {
   const [hasJoined, setHasJoined] = React.useState(false);
   const [error, setError] = React.useState(null);
 
-  const { socket, isConnected, join, leave, currentUser, users, room, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus, emitDeafenStatus } = useSocketContext();
-  const { initializeAudio, isMuted, isSpeaking, toggleMute, toggleDeafen, isDeafened, isCameraOn, toggleCamera, disableCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream } = useMediaContext();
+  const { socket, isConnected, join, leave, currentUser, users, room, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus } = useSocketContext();
+  const { initializeAudio, isMuted, isSpeaking, toggleMute, isCameraOn, toggleCamera, disableCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream } = useMediaContext();
   const { remoteStreams, createOffer, cleanupPeer, cleanupAllPeers, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll } = usePeerContext();
 
   const handleJoin = React.useCallback(async ({ username, room: chosenRoom }) => {
@@ -66,10 +66,6 @@ const AppInner = () => {
     emitMicStatus(!isMuted);
   }, [toggleMute, emitMicStatus, isMuted]);
 
-  const handleToggleDeafen = React.useCallback(() => {
-    toggleDeafen();
-    setTimeout(() => emitDeafenStatus(!isDeafened), 0);
-  }, [toggleDeafen, emitDeafenStatus, isDeafened]);
 
   const handleToggleCamera = React.useCallback(async () => {
     if (isCameraOn) {
@@ -136,7 +132,7 @@ const AppInner = () => {
     <div className="h-screen flex bg-surface flex-col">
       <ConnectionStatus />
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="text-white font-semibold tracking-tight">Ruwad Meet</div>
+        <div className="text-white font-semibold tracking-tight">Not Google Meet</div>
         <div className="text-muted text-xs">Voice channel</div>
       </div>
       <div className="flex-1 relative flex">
@@ -153,8 +149,6 @@ const AppInner = () => {
             <MeetControls
               isMuted={isMuted}
               onToggleMute={handleToggleMute}
-              isDeafened={isDeafened}
-              onToggleDeafen={handleToggleDeafen}
               onLeave={handleLeave}
               isSharing={isScreenSharing}
               onToggleShare={handleToggleScreenShare}
@@ -163,8 +157,6 @@ const AppInner = () => {
           <MobileControls
             isMuted={isMuted}
             onToggleMute={handleToggleMute}
-            isDeafened={isDeafened}
-            onToggleDeafen={handleToggleDeafen}
             isCameraOn={isCameraOn}
             onToggleCamera={handleToggleCamera}
             isScreenSharing={isScreenSharing}
@@ -188,4 +180,14 @@ function App() {
 }
 
 export default App;
+
+
+
+
+
+
+
+
+
+
 

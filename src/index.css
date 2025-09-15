@@ -93,5 +93,6 @@
 
 
 html, body, #root { height: 100%; }
-body { overflow: hidden; }
+body { overflow: auto; }
+
 
