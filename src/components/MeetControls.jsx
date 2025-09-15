@@ -3,6 +3,8 @@ import React from 'react';
 export default function MeetControls({
   isMuted,
   onToggleMute,
+  isDeafened,
+  onToggleDeafen,
   onLeave,
   isSharing,
   onToggleShare,
@@ -21,6 +23,17 @@ export default function MeetControls({
       </IconButton>
 
       <EndCallButton onClick={onLeave} />
+
+      {onToggleDeafen && (
+        <IconButton
+          active={!isDeafened}
+          onClick={onToggleDeafen}
+          title={isDeafened ? 'Undeafen' : 'Deafen'}
+          className={isDeafened ? 'bg-discord-red hover:bg-red-600' : 'bg-surface hover:bg-surface-2'}
+        >
+          <DeafenIcon />
+        </IconButton>
+      )}
 
       {onToggleShare && (
         <IconButton
@@ -101,3 +114,10 @@ function CameraIcon() {
   );
 }
 
+function DeafenIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 3a7 7 0 00-7 7v6a2 2 0 002 2h1v-6H7a5 5 0 0110 0h-1v6h1a2 2 0 002-2v-6a7 7 0 00-7-7z"/>
+    </svg>
+  );
+}
