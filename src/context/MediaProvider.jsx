@@ -34,6 +34,7 @@ export const MediaProvider = ({ children }) => {
 
     // speaking detection
     audioContextRef.current = audioContextRef.current || new AudioContext();
+    try { await audioContextRef.current.resume(); } catch {}
     analyserRef.current = audioContextRef.current.createAnalyser();
     const source = audioContextRef.current.createMediaStreamSource(stream);
     source.connect(analyserRef.current);

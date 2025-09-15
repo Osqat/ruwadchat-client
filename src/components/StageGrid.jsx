@@ -108,7 +108,7 @@ function StageTile({ user, stream, hasVideo, isSpeaking, isCurrent, onVolume }) 
 
   return (
     <div
-      className={`relative rounded-lg bg-surface-2 border border-border shadow-sm overflow-hidden select-none ${
+      className={`animate-tile relative rounded-lg bg-surface-2 border border-border shadow-sm overflow-hidden select-none ${
         isSpeaking ? 'ring-2 ring-accent/70' : ''
       }`}
       title={user.username}

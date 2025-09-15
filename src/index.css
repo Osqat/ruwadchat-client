@@ -53,6 +53,31 @@
   width: 8px;
 }
 
+/* Meet-like subtle tile animation */
+@keyframes fade-in-scale {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-tile { animation: fade-in-scale 180ms ease-out; }
+
+/* Theme variables override */
+:root {
+  --surface: #0B0F14;
+  --surface-2: #0E131A;
+  --border: #1B212B;
+  --muted: #8792A2;
+}
+.theme-light {
+  --surface: #f8fafc; /* slate-50 */
+  --surface-2: #ffffff;
+  --border: #e5e7eb; /* gray-200 */
+  --muted: #475569; /* slate-600 */
+}
+.bg-surface { background-color: var(--surface) !important; }
+.bg-surface-2 { background-color: var(--surface-2) !important; }
+.border-border { border-color: var(--border) !important; }
+.text-muted { color: var(--muted) !important; }
+
 ::-webkit-scrollbar-track {
   background: #2C2F33;
 }

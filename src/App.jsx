@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import React from 'react';
 import JoinScreen from './components/JoinScreen';
 import ChatPanel from './components/ChatPanel';
 import StageGrid from './components/StageGrid.jsx';
 import MobileControls from './components/MobileControls.jsx';
-import UserSidebar from './components/UserSidebar';
+import MeetControls from './components/MeetControls.jsx';
 import { SocketProvider, useSocketContext } from './context/SocketProvider.jsx';
 import { MediaProvider, useMediaContext } from './context/MediaProvider.jsx';
 import { PeerProvider, usePeerContext } from './context/PeerProvider.jsx';
@@ -11,15 +11,17 @@ import { PeerProvider, usePeerContext } from './context/PeerProvider.jsx';
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
 const AppInner = () => {
-  const [hasJoined, setHasJoined] = useState(false);
-  const [messages, setMessages] = useState([]);
-  const [error, setError] = useState(null);
+  const [hasJoined, setHasJoined] = React.useState(false);
+  const [messages, setMessages] = React.useState([]);
+  const [error, setError] = React.useState(null);
+  const [showChat, setShowChat] = React.useState(false);
+  const [theme, setTheme] = React.useState('dark');
 
   const { socket, isConnected, join, leave, currentUser, users, room, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus, emitDeafenStatus } = useSocketContext();
   const { initializeAudio, isMuted, isSpeaking, toggleMute, toggleDeafen, isDeafened, isCameraOn, toggleCamera, disableCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream } = useMediaContext();
   const { remoteStreams, createOffer, cleanupPeer, cleanupAllPeers, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll } = usePeerContext();
 
-  const loadChatHistory = useCallback(async () => {
+  const loadChatHistory = React.useCallback(async () => {
     try {
       const response = await fetch(`${SERVER_URL}/api/messages?room=${encodeURIComponent(room)}`);
       if (response.ok) {
@@ -31,47 +33,46 @@ const AppInner = () => {
     }
   }, [room]);
 
-  const handleJoin = useCallback(
-    async ({ username, room: chosenRoom }) => {
-      try {
-        setError(null);
-        await initializeAudio();
-        await join({ username, room: chosenRoom });
-        setHasJoined(true);
-        await loadChatHistory();
-      } catch (e) {
-        setError('Failed to access microphone or connect to server. Check permissions and try again.');
-        throw e;
-      }
-    },
-    [initializeAudio, join, loadChatHistory]
-  );
+  const handleJoin = React.useCallback(async ({ username, room: chosenRoom }) => {
+    try {
+      setError(null);
+      await initializeAudio();
+      await join({ username, room: chosenRoom });
+      setHasJoined(true);
+      await loadChatHistory();
+    } catch (e) {
+      setError('Failed to access microphone or connect to server. Check permissions and try again.');
+      throw e;
+    }
+  }, [initializeAudio, join, loadChatHistory]);
 
-  const handleLeave = useCallback(() => {
+  const handleLeave = React.useCallback(() => {
     leave();
     cleanupAllPeers();
     setHasJoined(false);
     setMessages([]);
   }, [leave, cleanupAllPeers]);
 
-  // when new user connects, create a WebRTC offer
-  useEffect(() => {
+  React.useEffect(() => {
+    document.body.classList.toggle('theme-light', theme === 'light');
+    document.body.classList.toggle('theme-dark', theme === 'dark');
+  }, [theme]);
+
+  React.useEffect(() => {
     if (!socket) return;
     const onUserConnected = (user) => createOffer(user.id);
     socket.on('user-connected', onUserConnected);
     return () => socket.off('user-connected', onUserConnected);
   }, [socket, createOffer]);
 
-  // Handle remote streams to audio elements and gain chain
-  useEffect(() => {
+  React.useEffect(() => {
     remoteStreams.forEach((stream, userId) => {
       createAudioElement(userId, stream);
       attachRemoteStream(userId, stream);
     });
   }, [remoteStreams, createAudioElement, attachRemoteStream]);
 
-  // Remove audio and peer on user-disconnected
-  useEffect(() => {
+  React.useEffect(() => {
     if (!socket) return;
     const onUserDisconnected = (userId) => {
       cleanupPeer(userId);
@@ -81,8 +82,7 @@ const AppInner = () => {
     return () => socket.off('user-disconnected', onUserDisconnected);
   }, [socket, cleanupPeer, removeAudioElement]);
 
-  // Chat messages from server
-  useEffect(() => {
+  React.useEffect(() => {
     if (!socket) return;
     const onMessage = (message) => {
       if (message?.username && message?.message) setMessages((prev) => [...prev, message]);
@@ -91,23 +91,18 @@ const AppInner = () => {
     return () => socket.off('chat-message', onMessage);
   }, [socket]);
 
-  // Mic toggle
-  const handleToggleMute = useCallback(() => {
+  const handleToggleMute = React.useCallback(() => {
     toggleMute();
     emitMicStatus(!isMuted);
   }, [toggleMute, emitMicStatus, isMuted]);
 
-  // Deafen toggle (auto-mutes when enabled)
-  const handleToggleDeafen = useCallback(() => {
+  const handleToggleDeafen = React.useCallback(() => {
     toggleDeafen();
-    // Report current status after state change on next tick
     setTimeout(() => emitDeafenStatus(!isDeafened), 0);
   }, [toggleDeafen, emitDeafenStatus, isDeafened]);
 
-  // Camera toggle with renegotiation
-  const handleToggleCamera = useCallback(async () => {
+  const handleToggleCamera = React.useCallback(async () => {
     if (isCameraOn) {
-      // Stop local camera tracks and update local state
       try { await disableCamera(); } catch {}
       disableLocalVideoForPeers();
       await renegotiateWithAll();
@@ -122,9 +117,8 @@ const AppInner = () => {
     }
   }, [isCameraOn, toggleCamera, disableCamera, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll, emitVideoStatus]);
 
-  const handleToggleScreenShare = useCallback(async () => {
+  const handleToggleScreenShare = React.useCallback(async () => {
     if (isScreenSharing) {
-      // stop local screen tracks first so our tile reverts immediately
       try { await toggleScreenShare(); } catch {}
       disableLocalVideoForPeers();
       await renegotiateWithAll();
@@ -139,27 +133,12 @@ const AppInner = () => {
     }
   }, [isScreenSharing, toggleScreenShare, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll, emitVideoStatus]);
 
-  // If screen share ends from browser UI (track.onended), ensure peers are updated
-  useEffect(() => {
-    // on transition true -> false
-    // using a ref to store previous state is optional; idempotent ops are safe here
-    if (!isScreenSharing) {
-      (async () => {
-        disableLocalVideoForPeers();
-        await renegotiateWithAll();
-        emitVideoStatus(false);
-      })();
-    }
-  }, [isScreenSharing, disableLocalVideoForPeers, renegotiateWithAll, emitVideoStatus]);
-
-  // Speaking status propagation
-  useEffect(() => {
+  React.useEffect(() => {
     if (!hasJoined) return;
     emitSpeakingStatus(isSpeaking);
   }, [isSpeaking, emitSpeakingStatus, hasJoined]);
 
-  // UI connection badge
-  const ConnectionStatus = useMemo(() => () => {
+  const ConnectionStatus = React.useMemo(() => () => {
     if (!hasJoined) return null;
     return (
       <div className={`fixed top-4 right-4 px-3 py-1 rounded text-sm ${isConnected ? 'bg-discord-green' : 'bg-discord-red'} text-white`}>
@@ -184,44 +163,55 @@ const AppInner = () => {
   if (!hasJoined) return <JoinScreen onJoin={handleJoin} />;
 
   return (
-    <div className="h-screen flex bg-surface flex-col md:flex-row">
+    <div className="h-screen flex bg-surface flex-col">
       <ConnectionStatus />
-      <UserSidebar
-        users={users}
-        currentUser={currentUser}
-        isMuted={isMuted}
-        onToggleMute={handleToggleMute}
-        onToggleDeafen={handleToggleDeafen}
-        isDeafened={isDeafened}
-        onToggleCamera={handleToggleCamera}
-        isCameraOn={isCameraOn}
-        onToggleScreenShare={handleToggleScreenShare}
-        onLeave={handleLeave}
-        speakingUsers={speakingUsers}
-      />
-      <div className="flex-1 overflow-hidden pb-16 md:pb-0">
-        <StageGrid
-          users={users}
-          currentUser={currentUser}
-          remoteStreams={remoteStreams}
-          localStream={localStream}
-          speakingUsers={speakingUsers}
-          localSpeaking={isSpeaking}
-        />
-        <MobileControls
-          isMuted={isMuted}
-          onToggleMute={handleToggleMute}
-          isDeafened={isDeafened}
-          onToggleDeafen={handleToggleDeafen}
-          isCameraOn={isCameraOn}
-          onToggleCamera={handleToggleCamera}
-          isScreenSharing={isScreenSharing}
-          onToggleScreenShare={handleToggleScreenShare}
-        />
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div className="text-white font-semibold">Ruwad Meet</div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))} className="btn-secondary text-xs">{theme === 'dark' ? 'Light' : 'Dark'} Theme</button>
+          <button onClick={() => setShowChat((v) => !v)} className="btn-secondary text-xs">{showChat ? 'Hide Chat' : 'Show Chat'}</button>
+        </div>
       </div>
-      <div className="w-full md:w-[420px] border-l border-border bg-surface-2 md:block md:static fixed bottom-16 left-0 right-0 h-[40vh] md:h-auto">
-        <ChatPanel socket={socket} messages={messages} currentUser={currentUser} room={room} onReloadHistory={loadChatHistory} />
+      <div className="flex-1 relative flex">
+        <div className={`flex-1 overflow-hidden ${showChat ? 'md:mr-[420px]' : ''} pb-24`}>
+          <StageGrid
+            users={users}
+            currentUser={currentUser}
+            remoteStreams={remoteStreams}
+            localStream={localStream}
+            speakingUsers={speakingUsers}
+            localSpeaking={isSpeaking}
+          />
+          <div className="hidden md:block">
+            <MeetControls
+              isMuted={isMuted}
+              onToggleMute={handleToggleMute}
+              onLeave={handleLeave}
+              isSharing={isScreenSharing}
+              onToggleShare={handleToggleScreenShare}
+            />
+          </div>
+          <MobileControls
+            isMuted={isMuted}
+            onToggleMute={handleToggleMute}
+            isDeafened={isDeafened}
+            onToggleDeafen={handleToggleDeafen}
+            isCameraOn={isCameraOn}
+            onToggleCamera={handleToggleCamera}
+            isScreenSharing={isScreenSharing}
+          />
+        </div>
+        {showChat && (
+          <div className="hidden md:block w-[420px] border-l border-border bg-surface-2 absolute right-0 top-0 bottom-0">
+            <ChatPanel socket={socket} messages={messages} currentUser={currentUser} room={room} onReloadHistory={loadChatHistory} />
+          </div>
+        )}
       </div>
+      {showChat && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 h-[45vh] bg-surface-2 border-t border-border">
+          <ChatPanel socket={socket} messages={messages} currentUser={currentUser} room={room} onReloadHistory={loadChatHistory} />
+        </div>
+      )}
     </div>
   );
 };
@@ -239,3 +229,4 @@ function App() {
 }
 
 export default App;
+
