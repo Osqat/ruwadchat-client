@@ -51,11 +51,6 @@ export const PeerProvider = ({ children }) => {
   const createPeerConnection = useCallback(
     (userId) => {
       const pc = new RTCPeerConnection(iceServers);
-      // Pre-create transceivers to keep m-lines stable (reduces renegotiation issues)
-      try {
-        pc.addTransceiver('audio', { direction: 'sendrecv' });
-        pc.addTransceiver('video', { direction: 'sendrecv' });
-      } catch {}
       if (localStream) localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
       pc.ontrack = (evt) => {
         const [remote] = evt.streams;
@@ -146,11 +141,13 @@ export const PeerProvider = ({ children }) => {
   // Disable video: remove video senders from every peer
   const disableLocalVideoForPeers = useCallback(() => {
     peersRef.current.forEach((pc, userId) => {
+      // prefer replaceTrack(null) to signal track stop
       const senders = pc.getSenders().filter((s) => s.track && s.track.kind === 'video');
       senders.forEach((s) => {
         try { s.replaceTrack(null); } catch {}
+        try { pc.removeTrack(s); } catch {}
       });
-      videoSendersRef.current.set(userId, senders);
+      videoSendersRef.current.set(userId, []);
     });
   }, []);
 

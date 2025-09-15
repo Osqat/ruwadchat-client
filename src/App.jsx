@@ -1,5 +1,6 @@
 import React from 'react';
 import JoinScreen from './components/JoinScreen';
+import ChatPanel from './components/ChatPanel';
 import StageGrid from './components/StageGrid.jsx';
 import MobileControls from './components/MobileControls.jsx';
 import MeetControls from './components/MeetControls.jsx';
@@ -13,6 +14,8 @@ const AppInner = () => {
   const [hasJoined, setHasJoined] = React.useState(false);
   const [messages, setMessages] = React.useState([]);
   const [error, setError] = React.useState(null);
+  const [showChat, setShowChat] = React.useState(false);
+  const [theme, setTheme] = React.useState('dark');
 
   const { socket, isConnected, join, leave, currentUser, users, room, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus, emitDeafenStatus } = useSocketContext();
   const { initializeAudio, isMuted, isSpeaking, toggleMute, toggleDeafen, isDeafened, isCameraOn, toggleCamera, disableCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream } = useMediaContext();
@@ -51,9 +54,9 @@ const AppInner = () => {
   }, [leave, cleanupAllPeers]);
 
   React.useEffect(() => {
-    document.body.classList.remove('theme-light');
-    document.body.classList.add('theme-dark');
-  }, []);
+    document.body.classList.toggle('theme-light', theme === 'light');
+    document.body.classList.toggle('theme-dark', theme === 'dark');
+  }, [theme]);
 
   React.useEffect(() => {
     if (!socket) return;
@@ -163,11 +166,14 @@ const AppInner = () => {
     <div className="h-screen flex bg-surface flex-col">
       <ConnectionStatus />
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="text-white font-semibold tracking-tight">Ruwad Meet</div>
-        <div className="text-muted text-xs">Voice channel</div>
+        <div className="text-white font-semibold">Ruwad Meet</div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))} className="btn-secondary text-xs">{theme === 'dark' ? 'Light' : 'Dark'} Theme</button>
+          <button onClick={() => setShowChat((v) => !v)} className="btn-secondary text-xs">{showChat ? 'Hide Chat' : 'Show Chat'}</button>
+        </div>
       </div>
       <div className="flex-1 relative flex">
-        <div className={`flex-1 overflow-hidden`}>
+        <div className={`flex-1 overflow-hidden ${showChat ? 'md:mr-[420px]' : ''} pb-24`}>
           <StageGrid
             users={users}
             currentUser={currentUser}
@@ -195,7 +201,17 @@ const AppInner = () => {
             isScreenSharing={isScreenSharing}
           />
         </div>
+        {showChat && (
+          <div className="hidden md:block w-[420px] border-l border-border bg-surface-2 absolute right-0 top-0 bottom-0">
+            <ChatPanel socket={socket} messages={messages} currentUser={currentUser} room={room} onReloadHistory={loadChatHistory} />
+          </div>
+        )}
       </div>
+      {showChat && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 h-[45vh] bg-surface-2 border-t border-border">
+          <ChatPanel socket={socket} messages={messages} currentUser={currentUser} room={room} onReloadHistory={loadChatHistory} />
+        </div>
+      )}
     </div>
   );
 };
