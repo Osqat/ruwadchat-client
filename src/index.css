@@ -90,3 +90,8 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #7289DA;
 }
+
+
+html, body, #root { height: 100%; }
+body { overflow: hidden; }
+
