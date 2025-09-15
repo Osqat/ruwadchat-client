@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMediaContext } from '../context/MediaProvider.jsx';
 
 // StageGrid: interactive participants area (video/avatars),
@@ -10,8 +10,9 @@ export default function StageGrid({
   localStream,
   speakingUsers = new Set(),
   localSpeaking = false,
-  onTileClick,
 }) {
+  const containerRef = useRef(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
   const { setRemoteGain } = useMediaContext();
   // Precompute a lookup of userId -> media stream
   const streamByUserId = useMemo(() => {
@@ -22,17 +23,42 @@ export default function StageGrid({
     return m;
   }, [remoteStreams, localStream, currentUser]);
 
-  // Dynamic classes for tile depending on count
-  const count = users.length;
-  const gridClass = 'grid gap-3 auto-grid p-3';
+  // Measure container to compute optimal grid like Google Meet
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0].contentRect;
+      setSize({ w: cr.width, h: cr.height });
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
 
-  const tileSizeClass = useMemo(() => {
-    if (count <= 2) return 'h-64';
-    if (count <= 4) return 'h-56';
-    if (count <= 6) return 'h-48';
-    if (count <= 9) return 'h-44';
-    return 'h-40';
-  }, [count]);
+  const count = users.length;
+  const gapPx = 12; // matches gap-3 (12px)
+  const aspect = 16 / 9;
+
+  const columns = useMemo(() => {
+    if (count === 0 || size.w === 0 || size.h === 0) return Math.max(1, Math.min(count, 3));
+    let bestCols = 1;
+    let bestArea = 0;
+    for (let cols = 1; cols <= count; cols++) {
+      const rows = Math.ceil(count / cols);
+      const tileW = (size.w - gapPx * (cols - 1)) / cols;
+      const tileH = (size.h - gapPx * (rows - 1)) / rows;
+      const usedW = Math.min(tileW, tileH * aspect);
+      const usedH = usedW / aspect;
+      const area = usedW * usedH;
+      if (area > bestArea) {
+        bestArea = area;
+        bestCols = cols;
+      }
+    }
+    return bestCols;
+  }, [count, size.w, size.h]);
+
+  const gridStyle = useMemo(() => ({ gridTemplateColumns: `repeat(${Math.max(columns, 1)}, minmax(0, 1fr))` }), [columns]);
+  const gridClass = 'grid gap-3 p-3 h-full w-full';
 
   const isSpeakingUser = (userId) => {
     if (!userId) return false;
@@ -41,7 +67,7 @@ export default function StageGrid({
   };
 
   return (
-    <div className={gridClass}>
+    <div ref={containerRef} className={gridClass} style={gridStyle}>
       {users.map((u) => {
         const stream = streamByUserId.get(u.id);
         const isSpeaking = isSpeakingUser(u.id);
@@ -54,10 +80,9 @@ export default function StageGrid({
             stream={stream}
             hasVideo={hasVideo}
             isSpeaking={isSpeaking}
-            sizeClass={tileSizeClass}
+            // tiles keep 16:9 while filling space
             isCurrent={isCurrent}
             onVolume={(v) => !isCurrent && setRemoteGain(u.id, v)}
-            onClick={() => onTileClick?.(u)}
           />
         );
       })}
@@ -65,7 +90,7 @@ export default function StageGrid({
   );
 }
 
-function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, isCurrent, onVolume, onClick }) {
+function StageTile({ user, stream, hasVideo, isSpeaking, isCurrent, onVolume }) {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -83,14 +108,14 @@ function StageTile({ user, stream, hasVideo, isSpeaking, sizeClass, isCurrent, o
 
   return (
     <div
-      className={`relative rounded-lg bg-surface-2 border border-border shadow-sm overflow-hidden cursor-pointer select-none ${
+      className={`relative rounded-lg bg-surface-2 border border-border shadow-sm overflow-hidden select-none ${
         isSpeaking ? 'ring-2 ring-accent/70' : ''
-      } ${sizeClass}`}
-      onClick={onClick}
+      }`}
       title={user.username}
+      style={{ aspectRatio: '16 / 9' }}
     >
       {hasVideo ? (
-        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline autoPlay muted />
+        <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain bg-black" playsInline autoPlay muted />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center">
           <div
