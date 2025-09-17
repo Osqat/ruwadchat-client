@@ -38,6 +38,7 @@ const setMembership = (setter, userId, present) => {
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [connectionState, setConnectionState] = useState('connecting');
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState([]);
   const [room, setRoom] = useState('general');
@@ -172,6 +173,7 @@ export const SocketProvider = ({ children }) => {
     const handleConnect = () => {
       selfIdRef.current = s.id;
       setIsConnected(true);
+      setConnectionState('connected');
       console.log('[socket] connected', s.id);
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -186,9 +188,11 @@ export const SocketProvider = ({ children }) => {
 
     const handleDisconnect = (reason) => {
       setIsConnected(false);
+      setConnectionState('disconnected');
       console.log('[socket] disconnected', reason);
       if (reason === 'io server disconnect') {
         reconnectTimeoutRef.current = setTimeout(() => {
+          setConnectionState('connecting');
           s.connect();
         }, 3000);
       }
@@ -197,11 +201,19 @@ export const SocketProvider = ({ children }) => {
     const handleConnectError = (err) => {
       console.warn('[socket] connect_error', err?.message);
       setIsConnected(false);
+      setConnectionState('failed');
     };
+
+    const handleReconnectAttempt = () => setConnectionState('connecting');
+    const handleReconnectSuccess = () => setConnectionState('connected');
+    const handleReconnectFailed = () => setConnectionState('failed');
 
     s.on('connect', handleConnect);
     s.on('disconnect', handleDisconnect);
     s.on('connect_error', handleConnectError);
+    s.io.on('reconnect_attempt', handleReconnectAttempt);
+    s.io.on('reconnect', handleReconnectSuccess);
+    s.io.on('reconnect_failed', handleReconnectFailed);
     setSocket(s);
 
     return () => {
@@ -209,6 +221,9 @@ export const SocketProvider = ({ children }) => {
       s.off('connect', handleConnect);
       s.off('disconnect', handleDisconnect);
       s.off('connect_error', handleConnectError);
+      s.io.off('reconnect_attempt', handleReconnectAttempt);
+      s.io.off('reconnect', handleReconnectSuccess);
+      s.io.off('reconnect_failed', handleReconnectFailed);
       s.close();
     };
   }, []);
@@ -310,6 +325,7 @@ export const SocketProvider = ({ children }) => {
   const value = useMemo(() => ({
     socket,
     isConnected,
+    connectionState,
     join,
     leave,
     emitMicStatus,
@@ -325,7 +341,26 @@ export const SocketProvider = ({ children }) => {
     deafenedUsers,
     emitVideoStatus,
     emitDeafenStatus,
-  }), [socket, isConnected, join, leave, emitMicStatus, emitSpeakingStatus, sendMessage, typing, stopTyping, currentUser, users, room, speakingUsers, videoUsers, deafenedUsers, emitVideoStatus, emitDeafenStatus]);
+  }), [
+    socket,
+    isConnected,
+    connectionState,
+    join,
+    leave,
+    emitMicStatus,
+    emitSpeakingStatus,
+    sendMessage,
+    typing,
+    stopTyping,
+    currentUser,
+    users,
+    room,
+    speakingUsers,
+    videoUsers,
+    deafenedUsers,
+    emitVideoStatus,
+    emitDeafenStatus,
+  ]);
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
 };

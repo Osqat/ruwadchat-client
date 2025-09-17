@@ -1,4 +1,5 @@
 import React from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import JoinScreen from './components/JoinScreen';
 import StageGrid from './components/StageGrid.jsx';
 import MeetControls from './components/MeetControls.jsx';
@@ -11,7 +12,7 @@ const AppInner = () => {
   const [hasJoined, setHasJoined] = React.useState(false);
   const [error, setError] = React.useState(null);
 
-  const { isConnected, join, leave, currentUser, users, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus } = useSocketContext();
+  const { isConnected, connectionState, join, leave, currentUser, users, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus } = useSocketContext();
   const { initializeAudio, isMuted, isSpeaking, isDeafened, toggleMute, toggleDeafen, isCameraOn, toggleCamera, disableCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream, audioElements } = useMediaContext();
   const { remoteStreams, cleanupAllPeers, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll } = usePeerContext();
   const previousRemoteIdsRef = React.useRef(new Set());
@@ -21,6 +22,7 @@ const AppInner = () => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices) return false;
     return typeof navigator.mediaDevices.getDisplayMedia === 'function';
   });
+  const [showConnectedBadge, setShowConnectedBadge] = React.useState(false);
 
   React.useEffect(() => {
     if (typeof navigator === 'undefined') return;
@@ -114,14 +116,26 @@ const AppInner = () => {
     emitSpeakingStatus(isSpeaking);
   }, [isSpeaking, emitSpeakingStatus, hasJoined]);
 
-  const ConnectionStatus = React.useMemo(() => () => {
-    if (!hasJoined) return null;
-    return (
-      <div className={`fixed top-4 right-4 px-3 py-1 rounded text-sm ${isConnected ? 'bg-discord-green' : 'bg-discord-red'} text-white`}>
-        {isConnected ? 'Connected' : 'Disconnected'}
-      </div>
-    );
-  }, [hasJoined, isConnected]);
+  React.useEffect(() => {
+    if (connectionState === 'connected' && hasJoined) {
+      setShowConnectedBadge(true);
+      const timeout = setTimeout(() => setShowConnectedBadge(false), 2000);
+      return () => clearTimeout(timeout);
+    }
+    if (connectionState !== 'connected') {
+      setShowConnectedBadge(false);
+    }
+  }, [connectionState, hasJoined]);
+
+  const displayedConnectionState = React.useMemo(() => {
+    if (connectionState === 'connected') {
+      return hasJoined && showConnectedBadge ? 'connected' : null;
+    }
+    if (connectionState === 'connecting' || connectionState === 'failed' || connectionState === 'disconnected') {
+      return connectionState;
+    }
+    return null;
+  }, [connectionState, hasJoined, showConnectedBadge]);
 
   if (error) {
     return (
@@ -136,11 +150,22 @@ const AppInner = () => {
     );
   }
 
-  if (!hasJoined) return <JoinScreen onJoin={handleJoin} />;
+  if (!hasJoined) {
+    return (
+      <>
+        <ConnectionBadge state={displayedConnectionState} />
+        <JoinScreen
+          onJoin={handleJoin}
+          connectionState={connectionState}
+          isSocketReady={isConnected}
+        />
+      </>
+    );
+  }
 
   return (
     <div className="h-screen flex bg-surface flex-col">
-      <ConnectionStatus />
+      <ConnectionBadge state={displayedConnectionState} />
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="text-white font-semibold tracking-tight">Not Google Meet</div>
         <div className="text-muted text-xs">Voice channel</div>
@@ -191,9 +216,48 @@ function App() {
 
 export default App;
 
+const badgeStyles = {
+  connecting: {
+    label: 'Connecting...',
+    className: 'bg-yellow-500/90 text-black',
+  },
+  connected: {
+    label: 'Connected',
+    className: 'bg-emerald-500/90 text-white',
+  },
+  failed: {
+    label: 'Failed to connect',
+    className: 'bg-red-500/90 text-white',
+  },
+  disconnected: {
+    label: 'Disconnected',
+    className: 'bg-red-500/90 text-white',
+  },
+};
 
+function ConnectionBadge({ state }) {
+  const meta = state ? badgeStyles[state] : null;
 
-
+  return (
+    <div className="pointer-events-none fixed top-6 left-1/2 z-50 -translate-x-1/2">
+      <AnimatePresence>
+        {meta && (
+          <motion.div
+            key={state}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+          >
+            <span className={`px-4 py-1 rounded-full text-sm font-medium shadow-lg ${meta.className}`}>
+              {meta.label}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 
 
