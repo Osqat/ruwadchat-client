@@ -1,8 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useMediaContext } from '../context/MediaProvider.jsx';
 
-// StageGrid: interactive participants area (video/avatars),
-// responsive tile sizing, speaking ring, and click interactions.
+const tileVariants = {
+  initial: { opacity: 0, scale: 0.93 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.9 },
+};
+
 export default function StageGrid({
   users = [],
   currentUser,
@@ -12,53 +17,36 @@ export default function StageGrid({
   localSpeaking = false,
 }) {
   const containerRef = useRef(null);
-  const [size, setSize] = useState({ w: 0, h: 0 });
   const { setRemoteGain } = useMediaContext();
-  // Precompute a lookup of userId -> media stream
-  const streamByUserId = useMemo(() => {
-    const m = new Map(remoteStreams);
-    if (currentUser?.id && localStream) {
-      m.set(currentUser.id, localStream);
-    }
-    return m;
-  }, [remoteStreams, localStream, currentUser]);
 
-  // Measure container to compute optimal grid like Google Meet
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const ro = new ResizeObserver((entries) => {
-      const cr = entries[0].contentRect;
-      setSize({ w: cr.width, h: cr.height });
-    });
-    ro.observe(containerRef.current);
-    return () => ro.disconnect();
-  }, []);
+  const streamByUserId = useMemo(() => {
+    const map = new Map(remoteStreams);
+    if (currentUser?.id && localStream) {
+      map.set(currentUser.id, localStream);
+    }
+    return map;
+  }, [currentUser, localStream, remoteStreams]);
 
   const count = users.length;
-  const gapPx = 12; // matches gap-3 (12px)
-  const aspect = 16 / 9;
 
   const columns = useMemo(() => {
-    if (count === 0 || size.w === 0 || size.h === 0) return Math.max(1, Math.min(count, 3));
-    let bestCols = 1;
-    let bestArea = 0;
-    for (let cols = 1; cols <= count; cols++) {
-      const rows = Math.ceil(count / cols);
-      const tileW = (size.w - gapPx * (cols - 1)) / cols;
-      const tileH = (size.h - gapPx * (rows - 1)) / rows;
-      const usedW = Math.min(tileW, tileH * aspect);
-      const usedH = usedW / aspect;
-      const area = usedW * usedH;
-      if (area > bestArea) {
-        bestArea = area;
-        bestCols = cols;
-      }
-    }
-    return bestCols;
-  }, [count, size.w, size.h]);
+    if (count <= 1) return 1;
+    if (count === 2) return 2;
+    if (count <= 4) return 2;
+    if (count <= 9) return 3;
+    if (count <= 16) return 4;
+    return Math.min(5, Math.ceil(Math.sqrt(count)));
+  }, [count]);
 
-  const gridStyle = useMemo(() => ({ gridTemplateColumns: `repeat(${Math.max(columns, 1)}, minmax(0, 1fr))` }), [columns]);
-  const gridClass = 'grid gap-3 p-3 h-full w-full';
+  const gridStyle = useMemo(
+    () => ({
+      gridTemplateColumns: `repeat(${Math.max(columns, 1)}, minmax(0, 1fr))`,
+      gridAutoRows: 'minmax(0, 1fr)',
+    }),
+    [columns],
+  );
+
+  const gridClass = `grid h-full w-full gap-4 p-6 transition-all duration-300 ${count <= 1 ? 'place-items-center' : ''}`;
 
   const isSpeakingUser = (userId) => {
     if (!userId) return false;
@@ -68,29 +56,32 @@ export default function StageGrid({
 
   return (
     <div ref={containerRef} className={gridClass} style={gridStyle}>
-      {users.map((u) => {
-        const stream = streamByUserId.get(u.id);
-        const isSpeaking = isSpeakingUser(u.id);
-        const hasVideo = !!stream && typeof stream.getVideoTracks === 'function' && stream.getVideoTracks().some(t => t.readyState === 'live');
-        const isCurrent = currentUser?.id === u.id;
-        return (
-          <StageTile
-            key={u.id}
-            user={u}
-            stream={stream}
-            hasVideo={hasVideo}
-            isSpeaking={isSpeaking}
-            // tiles keep 16:9 while filling space
-            isCurrent={isCurrent}
-            onVolume={(v) => !isCurrent && setRemoteGain(u.id, v)}
-          />
-        );
-      })}
+      <AnimatePresence>
+        {users.map((user) => {
+          const stream = streamByUserId.get(user.id);
+          const hasVideo = !!stream && typeof stream.getVideoTracks === 'function' && stream.getVideoTracks().some((track) => track.readyState === 'live');
+          const isCurrent = currentUser?.id === user.id;
+          const isSpeaking = isSpeakingUser(user.id);
+
+          return (
+            <StageTile
+              key={user.id}
+              user={user}
+              stream={stream}
+              hasVideo={hasVideo}
+              isSpeaking={isSpeaking}
+              isCurrent={isCurrent}
+              isSpotlight={count <= 1}
+              onVolume={(v) => !isCurrent && setRemoteGain(user.id, v)}
+            />
+          );
+        })}
+      </AnimatePresence>
     </div>
   );
 }
 
-function StageTile({ user, stream, hasVideo, isSpeaking, isCurrent, onVolume }) {
+function StageTile({ user, stream, hasVideo, isSpeaking, isCurrent, isSpotlight, onVolume }) {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -98,62 +89,76 @@ function StageTile({ user, stream, hasVideo, isSpeaking, isCurrent, onVolume }) 
       if (videoRef.current.srcObject !== stream) {
         videoRef.current.srcObject = stream;
       }
-      const v = videoRef.current;
-      const play = () => v.play().catch(() => {});
-      v.addEventListener('loadedmetadata', play);
-      play();
-      return () => v.removeEventListener('loadedmetadata', play);
+      const video = videoRef.current;
+      const handleLoaded = () => video.play().catch(() => {});
+      video.addEventListener('loadedmetadata', handleLoaded);
+      handleLoaded();
+      return () => video.removeEventListener('loadedmetadata', handleLoaded);
     }
-  }, [stream, hasVideo]);
+  }, [hasVideo, stream]);
+
+  const initialLetter = user.username?.charAt(0)?.toUpperCase() || '?';
 
   return (
-    <div
-      className={`animate-tile relative rounded-lg bg-surface-2 border border-border shadow-sm overflow-hidden select-none ${
-        isSpeaking ? 'ring-2 ring-accent/70' : ''
-      }`}
+    <motion.div
+      layout
+      variants={tileVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className={`group relative select-none overflow-hidden rounded-3xl border border-white/5 bg-[#11141b]/95 shadow-xl transition-shadow duration-300 backdrop-blur-sm ${
+        isSpeaking
+          ? 'ring-2 ring-[#3090FF]/80 shadow-[0_0_45px_rgba(48,144,255,0.45)]'
+          : 'hover:shadow-[0_16px_40px_rgba(16,24,40,0.45)]'
+      } ${isSpotlight ? 'w-full max-w-5xl' : ''}`}
       title={user.username}
       style={{ aspectRatio: '16 / 9' }}
     >
       {hasVideo ? (
-        <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain bg-black" playsInline autoPlay muted />
+        <video
+          ref={videoRef}
+          className="absolute inset-0 h-full w-full object-cover bg-black transition-transform duration-500 group-hover:scale-[1.02]"
+          playsInline
+          autoPlay
+          muted={isCurrent}
+        />
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#141823] via-[#1f2532] to-[#0b0f17]">
           <div
-            className="w-20 h-20 rounded-full flex items-center justify-center text-white text-xl font-semibold"
+            className="flex h-24 w-24 items-center justify-center rounded-full text-2xl font-semibold text-white shadow-inner shadow-black/40"
             style={{ backgroundColor: user.color || '#4b5563' }}
           >
-            {user.username?.charAt(0)?.toUpperCase()}
+            {initialLetter}
           </div>
         </div>
       )}
-      <div className="absolute left-0 right-0 bottom-0 p-2 bg-gradient-to-t from-black/60 to-transparent">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-white font-medium truncate">{user.username}</span>
-          <div className="flex items-center space-x-2">
-            {user.isMuted ? (
-              <span className="text-xs text-discord-red">Muted</span>
-            ) : (
-              <span className="text-xs text-discord-green">Live</span>
-            )}
+
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent p-3">
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="max-w-[14rem] truncate text-sm font-semibold text-white drop-shadow">{user.username}</p>
+            <p className="text-xs text-white/70">{isCurrent ? 'You' : user.isMuted ? 'Muted' : 'Live'}</p>
           </div>
+          {!isCurrent && (
+            <div className="ml-4 flex items-center space-x-2 text-xs text-white/70">
+              <span className="tracking-wide uppercase text-[0.65rem]">Vol</span>
+              <input
+                type="range"
+                min="0"
+                max="2"
+                step="0.05"
+                defaultValue={1}
+                onChange={(e) => onVolume && onVolume(Number(e.target.value))}
+                className="h-1 w-24 accent-[#3090FF] transition-all duration-200 hover:accent-[#62a8ff]"
+                title={`Volume for ${user.username}`}
+              />
+            </div>
+          )}
         </div>
-        {!isCurrent && (
-          <div className="mt-2">
-            <input
-              type="range"
-              min="0"
-              max="2"
-              step="0.05"
-              defaultValue={1}
-              onChange={(e) => onVolume && onVolume(Number(e.target.value))}
-              className="w-full"
-              title={`Volume for ${user.username}`}
-            />
-          </div>
-        )}
       </div>
-    </div>
+
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/15 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+    </motion.div>
   );
 }
-
-

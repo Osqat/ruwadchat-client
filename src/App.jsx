@@ -167,7 +167,7 @@ const AppInner = () => {
     <div className="h-screen flex bg-surface flex-col">
       <ConnectionBadge state={displayedConnectionState} />
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="text-white font-semibold tracking-tight">Not Google Meet</div>
+        <div className="text-white font-semibold tracking-tight">Ruwad Chat</div>
         <div className="text-muted text-xs">Voice channel</div>
       </div>
       <div className="flex-1 relative flex">

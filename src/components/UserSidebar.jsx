@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { useMediaContext } from '../context/MediaProvider.jsx';
 
 const UserSidebar = ({
@@ -47,7 +48,13 @@ const UserSidebar = ({
   );
 
   return (
-    <div className="hidden md:flex w-64 bg-surface-2 flex-col h-full border-r border-border">
+    <motion.div
+      initial={{ x: -24, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: -24, opacity: 0 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className="hidden h-full w-64 flex-col border-r border-border bg-surface-2/95 backdrop-blur-xl md:flex"
+    >
       {/* Header */}
       <div className="p-4 border-b border-border">
         <h2 className="text-lg font-semibold text-white">Voice Room</h2>
@@ -149,7 +156,7 @@ const UserSidebar = ({
           <button onClick={onLeave} className="btn-danger">Leave</button>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

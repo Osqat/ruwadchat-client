@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 
 const ChatPanel = ({ socket, messages, currentUser, room = 'general', onReloadHistory }) => {
   const [newMessage, setNewMessage] = useState('');
@@ -72,7 +73,13 @@ const ChatPanel = ({ socket, messages, currentUser, room = 'general', onReloadHi
   };
 
   return (
-    <div className="flex flex-col h-full bg-surface-2">
+    <motion.div
+      initial={{ x: 24, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: 24, opacity: 0 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className="glass-panel flex h-full flex-col bg-surface-2/90"
+    >
       {/* Chat Header */}
       <div className="p-4 border-b border-border">
         <h2 className="text-lg font-semibold text-white flex items-center">
@@ -148,11 +155,11 @@ const ChatPanel = ({ socket, messages, currentUser, room = 'general', onReloadHi
             </button>
           </div>
           <div className="h-5 mt-2 text-xs text-discord-light">
-            {typingUsers.size > 0 ? 'Someone is typing…' : ' '}
+            {typingUsers.size > 0 ? 'Someone is typing...' : ' '}
           </div>
         </form>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

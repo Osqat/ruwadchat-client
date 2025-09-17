@@ -3,30 +3,38 @@
 @tailwind utilities;
 
 @layer base {
+  *, *::before, *::after {
+    @apply transition-colors duration-200 ease-out;
+  }
+
   body {
-    @apply bg-surface text-white font-sans;
+    @apply bg-surface text-white font-sans antialiased;
+    background-image: radial-gradient(120% 120% at 10% 10%, rgba(48, 144, 255, 0.12) 0%, transparent 55%),
+      radial-gradient(120% 120% at 90% 0%, rgba(12, 161, 202, 0.1) 0%, transparent 60%),
+      linear-gradient(180deg, #05070b 0%, #080c12 45%, #020407 100%);
+    min-height: 100vh;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-discord-blurple hover:bg-blue-600 text-white font-medium py-2 px-4 rounded transition-colors;
+    @apply bg-discord-blurple hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-full shadow-lg shadow-blue-500/30 transition-all duration-200 ease-out hover:translate-y-[-1px] active:translate-y-1;
   }
-  
+
   .btn-secondary {
-    @apply bg-surface-2 hover:bg-surface text-white font-medium py-2 px-4 rounded transition-colors border border-border;
+    @apply bg-surface-2 hover:bg-surface text-white font-medium py-2 px-4 rounded-full border border-border/80 transition-all duration-200 ease-out shadow-md shadow-black/20;
   }
-  
+
   .btn-danger {
-    @apply bg-discord-red hover:bg-red-600 text-white font-medium py-2 px-4 rounded transition-colors;
+    @apply bg-discord-red hover:bg-red-600 text-white font-medium py-2 px-4 rounded-full transition-all duration-200 ease-out shadow-lg shadow-red-500/30 hover:translate-y-[-1px] active:translate-y-1;
   }
-  
+
   .btn-success {
-    @apply bg-discord-green hover:bg-green-600 text-white font-medium py-2 px-4 rounded transition-colors;
+    @apply bg-discord-green hover:bg-green-600 text-white font-medium py-2 px-4 rounded-full transition-all duration-200 ease-out shadow-lg shadow-emerald-500/30;
   }
-  
+
   .input-field {
-    @apply bg-surface-2 border border-border rounded px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-discord-blurple;
+    @apply bg-surface-2/90 border border-border/70 rounded-xl px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-[#3090FF] focus:ring-2 focus:ring-[#3090FF]/40 transition-all duration-200 ease-out;
   }
   
   .chat-message {
@@ -34,11 +42,31 @@
   }
   
   .user-item {
-    @apply flex items-center p-2 rounded hover:bg-surface transition-colors border border-transparent;
+    @apply flex items-center p-2 rounded-xl hover:bg-surface transition-all duration-200 ease-out border border-transparent hover:border-[#3090FF]/30;
   }
 
   .speaking {
     @apply ring-2 ring-discord-green;
+  }
+
+  .glass-panel {
+    @apply rounded-3xl border border-white/5 bg-white/5 backdrop-blur-xl shadow-[0_20px_45px_rgba(2,6,14,0.4)];
+  }
+
+  .panel-slide-enter {
+    @apply translate-x-4 opacity-0;
+  }
+
+  .panel-slide-enter-active {
+    @apply translate-x-0 opacity-100 transition-all duration-250 ease-out;
+  }
+
+  .panel-slide-exit {
+    @apply translate-x-0 opacity-100;
+  }
+
+  .panel-slide-exit-active {
+    @apply translate-x-4 opacity-0 transition-all duration-200 ease-in;
   }
 }
 

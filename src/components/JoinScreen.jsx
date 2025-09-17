@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 
 const statusStyles = {
   connecting: { text: 'Connecting to server...', className: 'text-yellow-400' },
@@ -31,8 +32,20 @@ const JoinScreen = ({ onJoin, connectionState = 'connecting', isSocketReady = fa
   const isFormDisabled = isJoining;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface">
-      <div className="bg-surface-2 p-8 rounded-lg shadow-xl w-full max-w-md border border-border">
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -16 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      className="min-h-screen flex items-center justify-center bg-surface"
+    >
+      <motion.div
+        initial={{ scale: 0.96, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.96, opacity: 0 }}
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+        className="glass-panel w-full max-w-md border border-white/10 bg-surface-2/90 p-8"
+      >
         <div className="text-center mb-8 space-y-2">
           <h1 className="text-3xl font-bold text-white">Ruwad Chat</h1>
           <p className={`text-sm ${connectionMeta.className}`}>{connectionMeta.text}</p>
@@ -88,8 +101,8 @@ const JoinScreen = ({ onJoin, connectionState = 'connecting', isSocketReady = fa
             Make sure your microphone is working and you have a stable internet connection
           </p>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
