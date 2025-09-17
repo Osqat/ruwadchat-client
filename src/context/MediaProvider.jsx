@@ -9,6 +9,13 @@ export const useMediaContext = () => {
 };
 
 const DEFAULT_MASTER_VOLUME = 1.6;
+const MIN_PEER_GAIN = 0.5;
+const MAX_PEER_GAIN = 3.0;
+
+const clampGain = (value) => {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(MAX_PEER_GAIN, Math.max(MIN_PEER_GAIN, value));
+};
 
 export const MediaProvider = ({ children }) => {
   const [localStream, setLocalStream] = useState(null);
@@ -18,11 +25,17 @@ export const MediaProvider = ({ children }) => {
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [audioElements, setAudioElements] = useState(new Map());
+  const [remoteVolumes, setRemoteVolumes] = useState(new Map());
 
   const audioElementsRef = useRef(new Map());
   const remoteStreamsRef = useRef(new Map());
   const remoteVolumeRef = useRef(new Map());
   const masterVolumeRef = useRef(DEFAULT_MASTER_VOLUME);
+  const deafenSnapshotRef = useRef(new Map());
+  const commitRemoteVolumes = useCallback(() => {
+    setRemoteVolumes(new Map(remoteVolumeRef.current));
+  }, [setRemoteVolumes]);
+
 
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
@@ -33,18 +46,28 @@ export const MediaProvider = ({ children }) => {
   const globalMuteRef = useRef(false);
 
   const ensureAudioContext = useCallback(async () => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext();
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!audioContextRef.current && AudioContextCtor) {
+      audioContextRef.current = new AudioContextCtor();
+      console.log('[audio] created AudioContext', audioContextRef.current.state);
     }
-    if (audioContextRef.current.state === 'suspended') {
-      try { await audioContextRef.current.resume(); } catch (err) { /* noop */ }
+    const ctx = audioContextRef.current;
+    if (!ctx) throw new Error('Web Audio API not supported');
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+        console.log('[audio] resumed AudioContext', ctx.state);
+      } catch (err) {
+        console.warn('[audio] failed to resume AudioContext', err);
+      }
     }
     if (!masterGainRef.current) {
-      masterGainRef.current = audioContextRef.current.createGain();
+      masterGainRef.current = ctx.createGain();
       masterGainRef.current.gain.value = masterVolumeRef.current;
-      masterGainRef.current.connect(audioContextRef.current.destination);
+      masterGainRef.current.connect(ctx.destination);
+      console.log('[audio] created master gain', { value: masterVolumeRef.current });
     }
-    return audioContextRef.current;
+    return ctx;
   }, []);
 
   const initializeAudio = useCallback(async () => {
@@ -92,8 +115,7 @@ export const MediaProvider = ({ children }) => {
     const audio = new Audio();
     audio.autoplay = true;
     audio.playsInline = true;
-    audio.muted = globalMuteRef.current || isDeafened;
-    audio.volume = 1;
+    audio.muted = true;
     if (stream) audio.srcObject = stream;
     audio.addEventListener('loadedmetadata', () => {
       audio.play().catch(() => {});
@@ -101,25 +123,11 @@ export const MediaProvider = ({ children }) => {
     audioElementsRef.current.set(userId, audio);
     if (!remoteVolumeRef.current.has(userId)) {
       remoteVolumeRef.current.set(userId, 1);
+      commitRemoteVolumes();
     }
     setAudioElements(new Map(audioElementsRef.current));
     return audio;
-  }, [isDeafened]);
-
-  const applyRemotePlaybackState = useCallback(({ deafen = isDeafened, muteAll = globalMuteRef.current } = {}) => {
-    const shouldMuteElements = deafen || muteAll;
-    audioElementsRef.current.forEach((audio) => {
-      audio.muted = shouldMuteElements;
-      if (!shouldMuteElements) {
-        audio.play().catch(() => {});
-      }
-    });
-    remoteStreamsRef.current.forEach((stream) => {
-      stream.getAudioTracks().forEach((track) => {
-        track.enabled = !deafen;
-      });
-    });
-  }, [isDeafened]);
+  }, [commitRemoteVolumes]);
 
   const attachRemoteStream = useCallback((userId, stream) => {
     if (!stream) return;
@@ -132,53 +140,78 @@ export const MediaProvider = ({ children }) => {
       audio.srcObject = stream;
     }
 
-    audio.muted = globalMuteRef.current || isDeafened;
-    audio.volume = 1;
     stream.getAudioTracks().forEach((track) => {
       track.enabled = !isDeafened;
     });
 
     ensureAudioContext()
       .then((ctx) => {
-        let entry = remoteGainsRef.current.get(userId);
-        const perUserVolume = remoteVolumeRef.current.get(userId) ?? 1;
-
-        if (!entry) {
-          const source = ctx.createMediaElementSource(audio);
-          const gain = ctx.createGain();
-          gain.gain.value = perUserVolume;
-          source.connect(gain);
-          if (!masterGainRef.current) {
-            masterGainRef.current = ctx.createGain();
-            masterGainRef.current.gain.value = masterVolumeRef.current;
-            masterGainRef.current.connect(ctx.destination);
-          }
-          gain.connect(masterGainRef.current);
-          entry = { source, gain };
-          remoteGainsRef.current.set(userId, entry);
-        } else {
-          entry.gain.gain.value = perUserVolume;
+        const existing = remoteGainsRef.current.get(userId);
+        if (existing) {
+          try { existing.source.disconnect(); } catch (err) { /* noop */ }
+          try { existing.gain.disconnect(); } catch (err) { /* noop */ }
         }
 
-        console.log('[media] attach remote audio', {
+        const sourceNode = ctx.createMediaStreamSource(stream);
+        const gainNode = ctx.createGain();
+        const previousVolume = remoteVolumeRef.current.get(userId);
+        const storedVolume = clampGain(previousVolume ?? 1);
+        remoteVolumeRef.current.set(userId, storedVolume);
+        if (previousVolume === undefined || previousVolume !== storedVolume) {
+          commitRemoteVolumes();
+        }
+        const targetVolume = !isDeafened && !globalMuteRef.current ? storedVolume : 0;
+
+        gainNode.gain.value = targetVolume;
+        sourceNode.connect(gainNode);
+        if (!masterGainRef.current) {
+          masterGainRef.current = ctx.createGain();
+          masterGainRef.current.gain.value = masterVolumeRef.current;
+          masterGainRef.current.connect(ctx.destination);
+        }
+        gainNode.connect(masterGainRef.current);
+        remoteGainsRef.current.set(userId, { source: sourceNode, gain: gainNode });
+
+        if (isDeafened) {
+          const snapshot = new Map(deafenSnapshotRef.current);
+          snapshot.set(userId, storedVolume);
+          deafenSnapshotRef.current = snapshot;
+        }
+
+        console.log('[audio] attach remote audio', {
           userId,
           tracks: typeof stream.getAudioTracks === 'function' ? stream.getAudioTracks().length : 0,
-          volume: perUserVolume,
+          gain: targetVolume,
           masterVolume: masterVolumeRef.current,
         });
-        applyRemotePlaybackState();
       })
       .catch((err) => {
         console.error('[media] attachRemoteStream error', err);
       });
-  }, [applyRemotePlaybackState, createAudioElement, ensureAudioContext, isDeafened]);
+  }, [commitRemoteVolumes, createAudioElement, ensureAudioContext, globalMuteRef, isDeafened]);
 
   const setRemoteGain = useCallback((userId, value) => {
-    const volume = Math.max(0, Number.isFinite(value) ? value : 1);
+    const volume = clampGain(value);
+    const previous = remoteVolumeRef.current.get(userId);
     remoteVolumeRef.current.set(userId, volume);
+    if (previous === undefined || previous !== volume) {
+      commitRemoteVolumes();
+    }
+
+    if (isDeafened) {
+      const snapshot = new Map(deafenSnapshotRef.current);
+      snapshot.set(userId, volume);
+      deafenSnapshotRef.current = snapshot;
+    }
+
     const entry = remoteGainsRef.current.get(userId);
-    if (entry) entry.gain.gain.value = volume;
-  }, []);
+    if (entry && !isDeafened && !globalMuteRef.current) {
+      entry.gain.gain.value = volume;
+    }
+    console.log('[audio] set remote gain', { userId, volume, isDeafened });
+  }, [commitRemoteVolumes, globalMuteRef, isDeafened]);
+
+  const getRemoteGain = useCallback((userId) => clampGain(remoteVolumes.get(userId) ?? 1), [remoteVolumes]);
 
   const setMasterGain = useCallback((value) => {
     const volume = Math.max(0, Number.isFinite(value) ? value : DEFAULT_MASTER_VOLUME);
@@ -201,13 +234,22 @@ export const MediaProvider = ({ children }) => {
       remoteGainsRef.current.delete(userId);
     }
     remoteStreamsRef.current.delete(userId);
-    remoteVolumeRef.current.delete(userId);
-  }, []);
+    const hadVolume = remoteVolumeRef.current.delete(userId);
+    if (hadVolume) {
+      commitRemoteVolumes();
+    }
+    const snapshot = new Map(deafenSnapshotRef.current);
+    snapshot.delete(userId);
+    deafenSnapshotRef.current = snapshot;
+  }, [commitRemoteVolumes]);
 
   const muteAll = useCallback((muted) => {
     globalMuteRef.current = !!muted;
-    applyRemotePlaybackState({ muteAll: !!muted });
-  }, [applyRemotePlaybackState]);
+    remoteGainsRef.current.forEach((entry, userId) => {
+      if (!entry) return;
+      entry.gain.gain.value = muted ? 0 : (isDeafened ? 0 : (remoteVolumeRef.current.get(userId) ?? 1));
+    });
+  }, [isDeafened]);
 
   const cleanup = useCallback(() => {
     if (localStream) {
@@ -225,6 +267,8 @@ export const MediaProvider = ({ children }) => {
 
     remoteStreamsRef.current.clear();
     remoteVolumeRef.current.clear();
+    deafenSnapshotRef.current = new Map();
+    commitRemoteVolumes();
 
     remoteGainsRef.current.forEach((entry) => {
       try { entry.source.disconnect(); } catch { /* noop */ }
@@ -236,7 +280,7 @@ export const MediaProvider = ({ children }) => {
       try { masterGainRef.current.disconnect(); } catch { /* noop */ }
       masterGainRef.current = null;
     }
-  }, [localStream]);
+  }, [commitRemoteVolumes, localStream]);
 
   useEffect(() => () => cleanup(), [cleanup]);
 
@@ -245,12 +289,31 @@ export const MediaProvider = ({ children }) => {
     if (next) {
       preDeafenMutedRef.current = isMuted;
       if (!isMuted) toggleMute();
-    } else if (!preDeafenMutedRef.current && isMuted) {
-      toggleMute();
+      const snapshot = new Map();
+      remoteGainsRef.current.forEach((entry, userId) => {
+        if (!entry) return;
+        snapshot.set(userId, entry.gain.gain.value);
+        entry.gain.gain.value = 0;
+      });
+      deafenSnapshotRef.current = snapshot;
+    } else {
+      remoteGainsRef.current.forEach((entry, userId) => {
+        if (!entry) return;
+        const saved = deafenSnapshotRef.current.get(userId);
+        const target = clampGain(saved ?? remoteVolumeRef.current.get(userId) ?? 1);
+        entry.gain.gain.value = globalMuteRef.current ? 0 : target;
+      });
+      deafenSnapshotRef.current = new Map();
+      if (!preDeafenMutedRef.current && isMuted) toggleMute();
     }
     setIsDeafened(next);
-    applyRemotePlaybackState({ deafen: next });
-  }, [applyRemotePlaybackState, isDeafened, isMuted, toggleMute]);
+    remoteStreamsRef.current.forEach((stream) => {
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = !next;
+      });
+    });
+    console.log('[audio] toggle deafen', { next });
+  }, [globalMuteRef, isDeafened, isMuted, toggleMute]);
 
   const disableScreenShare = useCallback(() => {
     if (!localStream) return;
@@ -345,6 +408,7 @@ export const MediaProvider = ({ children }) => {
       muteAll,
       setRemoteGain,
       setMasterGain,
+      getRemoteGain,
       cleanup,
     }),
     [
@@ -356,6 +420,7 @@ export const MediaProvider = ({ children }) => {
       disableScreenShare,
       enableCamera,
       enableScreenShare,
+      getRemoteGain,
       initializeAudio,
       isCameraOn,
       isDeafened,
