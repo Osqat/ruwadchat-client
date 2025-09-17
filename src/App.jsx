@@ -7,15 +7,14 @@ import { SocketProvider, useSocketContext } from './context/SocketProvider.jsx';
 import { MediaProvider, useMediaContext } from './context/MediaProvider.jsx';
 import { PeerProvider, usePeerContext } from './context/PeerProvider.jsx';
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
-
 const AppInner = () => {
   const [hasJoined, setHasJoined] = React.useState(false);
   const [error, setError] = React.useState(null);
 
-  const { socket, isConnected, join, leave, currentUser, users, room, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus } = useSocketContext();
-  const { initializeAudio, isMuted, isSpeaking, toggleMute, isCameraOn, toggleCamera, disableCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream } = useMediaContext();
-  const { remoteStreams, createOffer, cleanupPeer, cleanupAllPeers, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll } = usePeerContext();
+  const { isConnected, join, leave, currentUser, users, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus } = useSocketContext();
+  const { initializeAudio, isMuted, isSpeaking, toggleMute, isCameraOn, toggleCamera, disableCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream, audioElements } = useMediaContext();
+  const { remoteStreams, cleanupAllPeers, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll } = usePeerContext();
+  const previousRemoteIdsRef = React.useRef(new Set());
 
   const handleJoin = React.useCallback(async ({ username, room: chosenRoom }) => {
     try {
@@ -32,32 +31,26 @@ const AppInner = () => {
   const handleLeave = React.useCallback(() => {
     leave();
     cleanupAllPeers();
+    remoteStreams.forEach((_, userId) => removeAudioElement(userId));
+    previousRemoteIdsRef.current = new Set();
     setHasJoined(false);
-  }, [leave, cleanupAllPeers]);
+  }, [leave, cleanupAllPeers, remoteStreams, removeAudioElement]);
 
   React.useEffect(() => {
-    if (!socket) return;
-    const onUserConnected = (user) => createOffer(user.id);
-    socket.on('user-connected', onUserConnected);
-    return () => socket.off('user-connected', onUserConnected);
-  }, [socket, createOffer]);
-
-  React.useEffect(() => {
+    const currentIds = new Set(remoteStreams.keys());
     remoteStreams.forEach((stream, userId) => {
-      createAudioElement(userId, stream);
+      if (!audioElements.has(userId)) {
+        createAudioElement(userId, stream);
+      }
       attachRemoteStream(userId, stream);
     });
-  }, [remoteStreams, createAudioElement, attachRemoteStream]);
-
-  React.useEffect(() => {
-    if (!socket) return;
-    const onUserDisconnected = (userId) => {
-      cleanupPeer(userId);
-      removeAudioElement(userId);
-    };
-    socket.on('user-disconnected', onUserDisconnected);
-    return () => socket.off('user-disconnected', onUserDisconnected);
-  }, [socket, cleanupPeer, removeAudioElement]);
+    previousRemoteIdsRef.current.forEach((userId) => {
+      if (!currentIds.has(userId)) {
+        removeAudioElement(userId);
+      }
+    });
+    previousRemoteIdsRef.current = currentIds;
+  }, [remoteStreams, audioElements, createAudioElement, attachRemoteStream, removeAudioElement]);
 
   // chat removed
 

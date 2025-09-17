@@ -31,6 +31,7 @@ export const MediaProvider = ({ children }) => {
     });
 
     setLocalStream(stream);
+    console.log('[media] local media acquired', { audioTracks: stream.getAudioTracks().length, videoTracks: stream.getVideoTracks().length });
 
     // speaking detection
     audioContextRef.current = audioContextRef.current || new AudioContext();
