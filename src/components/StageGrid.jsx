@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMediaContext } from '../context/MediaProvider.jsx';
 
@@ -17,7 +17,7 @@ export default function StageGrid({
   localSpeaking = false,
 }) {
   const containerRef = useRef(null);
-  const { setRemoteGain, getRemoteGain } = useMediaContext();
+  const { setRemoteGain } = useMediaContext();
 
   const streamByUserId = useMemo(() => {
     const map = new Map(remoteStreams);
@@ -72,7 +72,6 @@ export default function StageGrid({
               isSpeaking={isSpeaking}
               isCurrent={isCurrent}
               isSpotlight={count <= 1}
-              initialVolume={getRemoteGain(user.id)}
               onVolume={(v) => !isCurrent && setRemoteGain(user.id, v)}
             />
           );
@@ -82,9 +81,8 @@ export default function StageGrid({
   );
 }
 
-function StageTile({ user, stream, hasVideo, isSpeaking, isCurrent, isSpotlight, onVolume, initialVolume = 1 }) {
+function StageTile({ user, stream, hasVideo, isSpeaking, isCurrent, isSpotlight, onVolume }) {
   const videoRef = useRef(null);
-  const [volume, setVolume] = useState(initialVolume);
 
   useEffect(() => {
     if (videoRef.current && hasVideo) {
@@ -100,15 +98,6 @@ function StageTile({ user, stream, hasVideo, isSpeaking, isCurrent, isSpotlight,
   }, [hasVideo, stream]);
 
   const initialLetter = user.username?.charAt(0)?.toUpperCase() || '?';
-  useEffect(() => {
-    setVolume(initialVolume);
-  }, [initialVolume]);
-
-  const handleVolumeChange = (value) => {
-    const next = Math.min(3, Math.max(0.5, value));
-    setVolume(next);
-    if (onVolume) onVolume(next);
-  };
 
   return (
     <motion.div
@@ -156,12 +145,11 @@ function StageTile({ user, stream, hasVideo, isSpeaking, isCurrent, isSpotlight,
               <span className="tracking-wide uppercase text-[0.65rem]">Vol</span>
               <input
                 type="range"
-                min="0.5"
-                max="3"
+                min="0"
+                max="2"
                 step="0.05"
-                value={volume}
-                onChange={(e) => handleVolumeChange(Number(e.target.value))}
-                onInput={(e) => handleVolumeChange(Number(e.target.value))}
+                defaultValue={1}
+                onChange={(e) => onVolume && onVolume(Number(e.target.value))}
                 className="h-1 w-24 accent-[#3090FF] transition-all duration-200 hover:accent-[#62a8ff]"
                 title={`Volume for ${user.username}`}
               />
