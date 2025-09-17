@@ -2,6 +2,7 @@ import React from 'react';
 import JoinScreen from './components/JoinScreen';
 import StageGrid from './components/StageGrid.jsx';
 import MeetControls from './components/MeetControls.jsx';
+import SettingsToggleButton from './components/SettingsToggleButton.jsx';
 import { SocketProvider, useSocketContext } from './context/SocketProvider.jsx';
 import { MediaProvider, useMediaContext } from './context/MediaProvider.jsx';
 import { PeerProvider, usePeerContext } from './context/PeerProvider.jsx';
@@ -15,8 +16,6 @@ const AppInner = () => {
   const { remoteStreams, cleanupAllPeers, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll } = usePeerContext();
   const previousRemoteIdsRef = React.useRef(new Set());
 
-  const [isChatOpen, setIsChatOpen] = React.useState(false);
-  const [isParticipantsOpen, setIsParticipantsOpen] = React.useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [canShareScreen, setCanShareScreen] = React.useState(() => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices) return false;
@@ -65,8 +64,6 @@ const AppInner = () => {
     previousRemoteIdsRef.current = currentIds;
   }, [remoteStreams, audioElements, createAudioElement, attachRemoteStream, removeAudioElement]);
 
-  // chat removed
-
   const handleToggleMute = React.useCallback(() => {
     toggleMute();
     emitMicStatus(!isMuted);
@@ -75,14 +72,6 @@ const AppInner = () => {
   const handleToggleDeafen = React.useCallback(() => {
     toggleDeafen();
   }, [toggleDeafen]);
-
-  const handleToggleChat = React.useCallback(() => {
-    setIsChatOpen((prev) => !prev);
-  }, []);
-
-  const handleToggleParticipants = React.useCallback(() => {
-    setIsParticipantsOpen((prev) => !prev);
-  }, []);
 
   const handleToggleSettings = React.useCallback(() => {
     setIsSettingsOpen((prev) => !prev);
@@ -171,18 +160,16 @@ const AppInner = () => {
             isCameraOn={isCameraOn}
             isScreenSharing={isScreenSharing}
             isDeafened={isDeafened}
-            isChatOpen={isChatOpen}
-            isParticipantsOpen={isParticipantsOpen}
-            isSettingsOpen={isSettingsOpen}
             canShareScreen={canShareScreen}
             onToggleMute={handleToggleMute}
             onToggleCamera={handleToggleCamera}
             onToggleShare={handleToggleScreenShare}
             onToggleDeafen={handleToggleDeafen}
-            onToggleChat={handleToggleChat}
-            onToggleParticipants={handleToggleParticipants}
-            onToggleSettings={handleToggleSettings}
             onLeave={handleLeave}
+          />
+          <SettingsToggleButton
+            isActive={isSettingsOpen}
+            onToggle={handleToggleSettings}
           />
         </div>
       </div>

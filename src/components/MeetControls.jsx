@@ -1,18 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import {
-  Mic,
-  MicOff,
-  Video,
-  VideoOff,
-  MonitorUp,
-  Volume2,
-  VolumeX,
-  PhoneOff,
-  MessageCircle,
-  Users,
-  Settings as SettingsIcon,
-} from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, MonitorUp, Volume2, VolumeX, PhoneOff } from 'lucide-react';
 
 const springTransition = { type: 'spring', stiffness: 380, damping: 24 };
 const safeAreaStyle = { paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' };
@@ -22,20 +10,14 @@ export default function MeetControls({
   isCameraOn,
   isScreenSharing,
   isDeafened,
-  isChatOpen,
-  isParticipantsOpen,
-  isSettingsOpen,
   canShareScreen = true,
   onToggleMute,
   onToggleCamera,
   onToggleShare,
   onToggleDeafen,
-  onToggleChat,
-  onToggleParticipants,
-  onToggleSettings,
   onLeave,
 }) {
-  const primaryButtons = React.useMemo(() => ([
+  const leftButtons = React.useMemo(() => ([
     {
       key: 'mic',
       label: isMuted ? 'Unmute microphone' : 'Mute microphone',
@@ -45,9 +27,20 @@ export default function MeetControls({
       disabled: !onToggleMute,
     },
     {
+      key: 'deafen',
+      label: isDeafened ? 'Undeafen' : 'Deafen',
+      icon: isDeafened ? VolumeX : Volume2,
+      onClick: onToggleDeafen,
+      active: !!isDeafened,
+      disabled: !onToggleDeafen,
+    },
+  ]), [isMuted, onToggleMute, isDeafened, onToggleDeafen]);
+
+  const rightButtons = React.useMemo(() => ([
+    {
       key: 'camera',
       label: isCameraOn ? 'Turn camera off' : 'Turn camera on',
-      icon: isCameraOn ? Video : VideoOff,
+      icon: isCameraOn ? VideoOff : Video,
       onClick: onToggleCamera,
       active: !!isCameraOn,
       disabled: !onToggleCamera,
@@ -60,50 +53,17 @@ export default function MeetControls({
       active: !!isScreenSharing,
       disabled: !onToggleShare || !canShareScreen,
     },
-    {
-      key: 'deafen',
-      label: isDeafened ? 'Undeafen' : 'Deafen',
-      icon: isDeafened ? VolumeX : Volume2,
-      onClick: onToggleDeafen,
-      active: !!isDeafened,
-      disabled: !onToggleDeafen,
-    },
-  ]), [isMuted, onToggleMute, isCameraOn, onToggleCamera, isScreenSharing, onToggleShare, canShareScreen, isDeafened, onToggleDeafen]);
-
-  const secondaryButtons = React.useMemo(() => ([
-    {
-      key: 'chat',
-      label: 'Toggle chat panel',
-      icon: MessageCircle,
-      onClick: onToggleChat,
-      active: !!isChatOpen,
-      disabled: !onToggleChat,
-    },
-    {
-      key: 'participants',
-      label: 'Toggle participants panel',
-      icon: Users,
-      onClick: onToggleParticipants,
-      active: !!isParticipantsOpen,
-      disabled: !onToggleParticipants,
-    },
-    {
-      key: 'settings',
-      label: 'Open meeting settings',
-      icon: SettingsIcon,
-      onClick: onToggleSettings,
-      active: !!isSettingsOpen,
-      disabled: !onToggleSettings,
-    },
-  ]), [onToggleChat, isChatOpen, onToggleParticipants, isParticipantsOpen, onToggleSettings, isSettingsOpen]);
+  ]), [isCameraOn, onToggleCamera, canShareScreen, isScreenSharing, onToggleShare]);
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40">
       <div className="flex justify-center px-4 pb-6 pt-4 sm:pb-8" style={safeAreaStyle}>
-        <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-3 rounded-full border border-white/10 bg-[#1C1C1E]/90 px-4 py-3 shadow-2xl backdrop-blur-xl">
-          {primaryButtons.map((btn) => (
-            <ControlButton key={btn.key} {...btn} />
-          ))}
+        <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-white/10 bg-[#1C1C1E]/90 px-5 py-3 shadow-2xl backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            {leftButtons.map((btn) => (
+              <ControlButton key={btn.key} {...btn} />
+            ))}
+          </div>
 
           <ControlButton
             key="leave"
@@ -114,9 +74,11 @@ export default function MeetControls({
             disabled={!onLeave}
           />
 
-          {secondaryButtons.map((btn) => (
-            <ControlButton key={btn.key} {...btn} />
-          ))}
+          <div className="flex items-center gap-3">
+            {rightButtons.map((btn) => (
+              <ControlButton key={btn.key} {...btn} />
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -126,6 +88,7 @@ export default function MeetControls({
 function ControlButton({ icon: Icon, label, onClick, active = false, variant = 'default', disabled = false }) {
   const isDanger = variant === 'danger';
   const ResolvedIcon = Icon || Mic;
+
   const classes = [
     'flex items-center justify-center rounded-full transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#3090FF] focus-visible:ring-offset-[#1C1C1E]',
     isDanger ? 'h-14 w-14 border border-red-500/70 bg-red-500 text-white shadow-[0_12px_30px_rgba(255,0,0,0.45)] hover:bg-red-600' : 'h-12 w-12 border border-white/10 text-white',
