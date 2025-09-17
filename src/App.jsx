@@ -1,7 +1,6 @@
 import React from 'react';
 import JoinScreen from './components/JoinScreen';
 import StageGrid from './components/StageGrid.jsx';
-import MobileControls from './components/MobileControls.jsx';
 import MeetControls from './components/MeetControls.jsx';
 import { SocketProvider, useSocketContext } from './context/SocketProvider.jsx';
 import { MediaProvider, useMediaContext } from './context/MediaProvider.jsx';
@@ -12,9 +11,23 @@ const AppInner = () => {
   const [error, setError] = React.useState(null);
 
   const { isConnected, join, leave, currentUser, users, emitMicStatus, emitSpeakingStatus, speakingUsers, emitVideoStatus } = useSocketContext();
-  const { initializeAudio, isMuted, isSpeaking, toggleMute, isCameraOn, toggleCamera, disableCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream, audioElements } = useMediaContext();
+  const { initializeAudio, isMuted, isSpeaking, isDeafened, toggleMute, toggleDeafen, isCameraOn, toggleCamera, disableCamera, isScreenSharing, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, localStream, audioElements } = useMediaContext();
   const { remoteStreams, cleanupAllPeers, enableLocalVideoForPeers, disableLocalVideoForPeers, renegotiateWithAll } = usePeerContext();
   const previousRemoteIdsRef = React.useRef(new Set());
+
+  const [isChatOpen, setIsChatOpen] = React.useState(false);
+  const [isParticipantsOpen, setIsParticipantsOpen] = React.useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+  const [canShareScreen, setCanShareScreen] = React.useState(() => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices) return false;
+    return typeof navigator.mediaDevices.getDisplayMedia === 'function';
+  });
+
+  React.useEffect(() => {
+    if (typeof navigator === 'undefined') return;
+    const supported = Boolean(navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function');
+    setCanShareScreen(supported);
+  }, []);
 
   const handleJoin = React.useCallback(async ({ username, room: chosenRoom }) => {
     try {
@@ -59,6 +72,21 @@ const AppInner = () => {
     emitMicStatus(!isMuted);
   }, [toggleMute, emitMicStatus, isMuted]);
 
+  const handleToggleDeafen = React.useCallback(() => {
+    toggleDeafen();
+  }, [toggleDeafen]);
+
+  const handleToggleChat = React.useCallback(() => {
+    setIsChatOpen((prev) => !prev);
+  }, []);
+
+  const handleToggleParticipants = React.useCallback(() => {
+    setIsParticipantsOpen((prev) => !prev);
+  }, []);
+
+  const handleToggleSettings = React.useCallback(() => {
+    setIsSettingsOpen((prev) => !prev);
+  }, []);
 
   const handleToggleCamera = React.useCallback(async () => {
     if (isCameraOn) {
@@ -138,21 +166,23 @@ const AppInner = () => {
             speakingUsers={speakingUsers}
             localSpeaking={isSpeaking}
           />
-          <div className="hidden md:block">
-            <MeetControls
-              isMuted={isMuted}
-              onToggleMute={handleToggleMute}
-              onLeave={handleLeave}
-              isSharing={isScreenSharing}
-              onToggleShare={handleToggleScreenShare}
-            />
-          </div>
-          <MobileControls
+          <MeetControls
             isMuted={isMuted}
-            onToggleMute={handleToggleMute}
             isCameraOn={isCameraOn}
-            onToggleCamera={handleToggleCamera}
             isScreenSharing={isScreenSharing}
+            isDeafened={isDeafened}
+            isChatOpen={isChatOpen}
+            isParticipantsOpen={isParticipantsOpen}
+            isSettingsOpen={isSettingsOpen}
+            canShareScreen={canShareScreen}
+            onToggleMute={handleToggleMute}
+            onToggleCamera={handleToggleCamera}
+            onToggleShare={handleToggleScreenShare}
+            onToggleDeafen={handleToggleDeafen}
+            onToggleChat={handleToggleChat}
+            onToggleParticipants={handleToggleParticipants}
+            onToggleSettings={handleToggleSettings}
+            onLeave={handleLeave}
           />
         </div>
       </div>
