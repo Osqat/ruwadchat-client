@@ -8,6 +8,8 @@ export const useMediaContext = () => {
   return ctx;
 };
 
+const DEFAULT_MASTER_VOLUME = 1.6;
+
 export const MediaProvider = ({ children }) => {
   const [localStream, setLocalStream] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -16,35 +18,47 @@ export const MediaProvider = ({ children }) => {
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [audioElements, setAudioElements] = useState(new Map());
+
   const audioElementsRef = useRef(new Map());
+  const remoteStreamsRef = useRef(new Map());
+  const remoteVolumeRef = useRef(new Map());
+  const masterVolumeRef = useRef(DEFAULT_MASTER_VOLUME);
+
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const speakingTimeoutRef = useRef(null);
   const masterGainRef = useRef(null);
-  const remoteGainsRef = useRef(new Map()); // userId -> {source, gain}
+  const remoteGainsRef = useRef(new Map()); // userId -> { source, gain }
   const preDeafenMutedRef = useRef(false);
   const globalMuteRef = useRef(false);
 
+  const ensureAudioContext = useCallback(async () => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+    }
+    if (audioContextRef.current.state === 'suspended') {
+      try { await audioContextRef.current.resume(); } catch (err) { /* noop */ }
+    }
+    if (!masterGainRef.current) {
+      masterGainRef.current = audioContextRef.current.createGain();
+      masterGainRef.current.gain.value = masterVolumeRef.current;
+      masterGainRef.current.connect(audioContextRef.current.destination);
+    }
+    return audioContextRef.current;
+  }, []);
+
   const initializeAudio = useCallback(async () => {
+    const ctx = await ensureAudioContext();
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: false },
     });
 
     setLocalStream(stream);
     console.log('[media] local media acquired', { audioTracks: stream.getAudioTracks().length, videoTracks: stream.getVideoTracks().length });
 
-    // speaking detection
-    audioContextRef.current = audioContextRef.current || new AudioContext();
-    try { await audioContextRef.current.resume(); } catch {}
-    analyserRef.current = audioContextRef.current.createAnalyser();
-    const source = audioContextRef.current.createMediaStreamSource(stream);
+    analyserRef.current = ctx.createAnalyser();
+    const source = ctx.createMediaStreamSource(stream);
     source.connect(analyserRef.current);
-    // master gain for remote playback, default boosted for clarity
-    if (!masterGainRef.current) {
-      masterGainRef.current = audioContextRef.current.createGain();
-      masterGainRef.current.gain.value = 1.6; // default boost to address low volume
-      masterGainRef.current.connect(audioContextRef.current.destination);
-    }
     analyserRef.current.fftSize = 256;
     const bufferLength = analyserRef.current.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
@@ -52,8 +66,8 @@ export const MediaProvider = ({ children }) => {
     const tick = () => {
       if (!analyserRef.current) return;
       analyserRef.current.getByteFrequencyData(dataArray);
-      const avg = dataArray.reduce((a, b) => a + b, 0) / bufferLength;
-      const speaking = avg > 10;
+      const average = dataArray.reduce((acc, value) => acc + value, 0) / bufferLength;
+      const speaking = average > 10;
       if (speaking !== isSpeaking) {
         setIsSpeaking(speaking);
         if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
@@ -61,9 +75,10 @@ export const MediaProvider = ({ children }) => {
       }
       requestAnimationFrame(tick);
     };
+
     tick();
     return stream;
-  }, [isSpeaking]);
+  }, [ensureAudioContext, isSpeaking]);
 
   const toggleMute = useCallback(() => {
     if (!localStream) return;
@@ -75,41 +90,100 @@ export const MediaProvider = ({ children }) => {
 
   const createAudioElement = useCallback((userId, stream) => {
     const audio = new Audio();
-    audio.srcObject = stream;
     audio.autoplay = true;
     audio.playsInline = true;
-    audio.volume = 0; // we will route audio through WebAudio for gain control
+    audio.muted = globalMuteRef.current || isDeafened;
+    audio.volume = 1;
+    if (stream) audio.srcObject = stream;
     audio.addEventListener('loadedmetadata', () => {
       audio.play().catch(() => {});
     });
     audioElementsRef.current.set(userId, audio);
+    if (!remoteVolumeRef.current.has(userId)) {
+      remoteVolumeRef.current.set(userId, 1);
+    }
     setAudioElements(new Map(audioElementsRef.current));
     return audio;
-  }, []);
+  }, [isDeafened]);
 
-  // Attach remote stream to WebAudio graph with per-user gain
+  const applyRemotePlaybackState = useCallback(({ deafen = isDeafened, muteAll = globalMuteRef.current } = {}) => {
+    const shouldMuteElements = deafen || muteAll;
+    audioElementsRef.current.forEach((audio) => {
+      audio.muted = shouldMuteElements;
+      if (!shouldMuteElements) {
+        audio.play().catch(() => {});
+      }
+    });
+    remoteStreamsRef.current.forEach((stream) => {
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = !deafen;
+      });
+    });
+  }, [isDeafened]);
+
   const attachRemoteStream = useCallback((userId, stream) => {
-    if (!audioContextRef.current || !masterGainRef.current || !stream) return;
-    // If exists, disconnect old
-    const existing = remoteGainsRef.current.get(userId);
-    if (existing) {
-      try { existing.source.disconnect(); existing.gain.disconnect(); } catch { /* noop */ }
+    if (!stream) return;
+    remoteStreamsRef.current.set(userId, stream);
+
+    let audio = audioElementsRef.current.get(userId);
+    if (!audio) {
+      audio = createAudioElement(userId, stream);
+    } else if (audio.srcObject !== stream) {
+      audio.srcObject = stream;
     }
-    const source = audioContextRef.current.createMediaStreamSource(stream);
-    const gain = audioContextRef.current.createGain();
-    gain.gain.value = globalMuteRef.current ? 0 : 1.0; // respect global mute state
-    source.connect(gain);
-    gain.connect(masterGainRef.current);
-    remoteGainsRef.current.set(userId, { source, gain });
-  }, []);
+
+    audio.muted = globalMuteRef.current || isDeafened;
+    audio.volume = 1;
+    stream.getAudioTracks().forEach((track) => {
+      track.enabled = !isDeafened;
+    });
+
+    ensureAudioContext()
+      .then((ctx) => {
+        let entry = remoteGainsRef.current.get(userId);
+        const perUserVolume = remoteVolumeRef.current.get(userId) ?? 1;
+
+        if (!entry) {
+          const source = ctx.createMediaElementSource(audio);
+          const gain = ctx.createGain();
+          gain.gain.value = perUserVolume;
+          source.connect(gain);
+          if (!masterGainRef.current) {
+            masterGainRef.current = ctx.createGain();
+            masterGainRef.current.gain.value = masterVolumeRef.current;
+            masterGainRef.current.connect(ctx.destination);
+          }
+          gain.connect(masterGainRef.current);
+          entry = { source, gain };
+          remoteGainsRef.current.set(userId, entry);
+        } else {
+          entry.gain.gain.value = perUserVolume;
+        }
+
+        console.log('[media] attach remote audio', {
+          userId,
+          tracks: typeof stream.getAudioTracks === 'function' ? stream.getAudioTracks().length : 0,
+          volume: perUserVolume,
+          masterVolume: masterVolumeRef.current,
+        });
+        applyRemotePlaybackState();
+      })
+      .catch((err) => {
+        console.error('[media] attachRemoteStream error', err);
+      });
+  }, [applyRemotePlaybackState, createAudioElement, ensureAudioContext, isDeafened]);
 
   const setRemoteGain = useCallback((userId, value) => {
+    const volume = Math.max(0, Number.isFinite(value) ? value : 1);
+    remoteVolumeRef.current.set(userId, volume);
     const entry = remoteGainsRef.current.get(userId);
-    if (entry) entry.gain.gain.value = value;
+    if (entry) entry.gain.gain.value = volume;
   }, []);
 
   const setMasterGain = useCallback((value) => {
-    if (masterGainRef.current) masterGainRef.current.gain.value = value;
+    const volume = Math.max(0, Number.isFinite(value) ? value : DEFAULT_MASTER_VOLUME);
+    masterVolumeRef.current = volume;
+    if (masterGainRef.current) masterGainRef.current.gain.value = volume;
   }, []);
 
   const removeAudioElement = useCallback((userId) => {
@@ -120,56 +194,93 @@ export const MediaProvider = ({ children }) => {
       audioElementsRef.current.delete(userId);
       setAudioElements(new Map(audioElementsRef.current));
     }
-    const nodes = remoteGainsRef.current.get(userId);
-    if (nodes) {
-      try { nodes.source.disconnect(); nodes.gain.disconnect(); } catch { /* noop */ }
+    const entry = remoteGainsRef.current.get(userId);
+    if (entry) {
+      try { entry.source.disconnect(); } catch { /* noop */ }
+      try { entry.gain.disconnect(); } catch { /* noop */ }
       remoteGainsRef.current.delete(userId);
     }
+    remoteStreamsRef.current.delete(userId);
+    remoteVolumeRef.current.delete(userId);
   }, []);
 
   const muteAll = useCallback((muted) => {
     globalMuteRef.current = !!muted;
-    remoteGainsRef.current.forEach((entry) => {
-      entry.gain.gain.value = muted ? 0 : 1.0;
-    });
-  }, []);
+    applyRemotePlaybackState({ muteAll: !!muted });
+  }, [applyRemotePlaybackState]);
 
   const cleanup = useCallback(() => {
     if (localStream) {
-      localStream.getTracks().forEach((t) => t.stop());
+      localStream.getTracks().forEach((track) => track.stop());
       setLocalStream(null);
     }
-    // keep audio context alive for user interactions; do not close to avoid autoplay issues
     if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
-    audioElementsRef.current.forEach((a) => {
-      a.pause();
-      a.srcObject = null;
+
+    audioElementsRef.current.forEach((audio) => {
+      audio.pause();
+      audio.srcObject = null;
     });
     audioElementsRef.current.clear();
     setAudioElements(new Map());
-    remoteGainsRef.current.forEach((n) => { try { n.source.disconnect(); n.gain.disconnect(); } catch{} });
+
+    remoteStreamsRef.current.clear();
+    remoteVolumeRef.current.clear();
+
+    remoteGainsRef.current.forEach((entry) => {
+      try { entry.source.disconnect(); } catch { /* noop */ }
+      try { entry.gain.disconnect(); } catch { /* noop */ }
+    });
     remoteGainsRef.current.clear();
+
+    if (masterGainRef.current) {
+      try { masterGainRef.current.disconnect(); } catch { /* noop */ }
+      masterGainRef.current = null;
+    }
   }, [localStream]);
 
   useEffect(() => () => cleanup(), [cleanup]);
 
-  // Deafen: mutes mic and silences remote via master gain
   const toggleDeafen = useCallback(() => {
     const next = !isDeafened;
     if (next) {
       preDeafenMutedRef.current = isMuted;
-      // ensure mic muted
       if (!isMuted) toggleMute();
-      setMasterGain(0);
-    } else {
-      // restore master gain and previous mic state (stay muted if was muted before)
-      setMasterGain(1.6);
-      if (!preDeafenMutedRef.current && isMuted) toggleMute();
+    } else if (!preDeafenMutedRef.current && isMuted) {
+      toggleMute();
     }
     setIsDeafened(next);
-  }, [isDeafened, isMuted, toggleMute, setMasterGain]);
+    applyRemotePlaybackState({ deafen: next });
+  }, [applyRemotePlaybackState, isDeafened, isMuted, toggleMute]);
 
-  // Camera controls
+  const disableScreenShare = useCallback(() => {
+    if (!localStream) return;
+    localStream.getVideoTracks().forEach((track) => {
+      try { track.stop(); } catch { /* noop */ }
+      try { localStream.removeTrack(track); } catch { /* noop */ }
+    });
+    setIsScreenSharing(false);
+  }, [localStream]);
+
+  const enableScreenShare = useCallback(async () => {
+    if (!localStream) return null;
+    if (isScreenSharing) return localStream.getVideoTracks()[0] || null;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      console.warn('Screen sharing not supported on this browser');
+      throw new Error('Screen sharing not supported on this browser');
+    }
+    const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    const screenTrack = screen.getVideoTracks()[0];
+    if (screenTrack) {
+      screenTrack.onended = () => {
+        disableScreenShare();
+      };
+      localStream.addTrack(screenTrack);
+      setIsScreenSharing(true);
+      setIsCameraOn(false);
+    }
+    return screenTrack || null;
+  }, [disableScreenShare, isScreenSharing, localStream]);
+
   const enableCamera = useCallback(async () => {
     if (!localStream) return null;
     if (isCameraOn) return localStream.getVideoTracks()[0] || null;
@@ -185,7 +296,10 @@ export const MediaProvider = ({ children }) => {
 
   const disableCamera = useCallback(() => {
     if (!localStream) return;
-    localStream.getVideoTracks().forEach((t) => { t.stop(); localStream.removeTrack(t); });
+    localStream.getVideoTracks().forEach((track) => {
+      track.stop();
+      localStream.removeTrack(track);
+    });
     setIsCameraOn(false);
   }, [localStream]);
 
@@ -194,52 +308,18 @@ export const MediaProvider = ({ children }) => {
       disableCamera();
       return null;
     }
-    // if screen is on, turn it off first
     if (isScreenSharing) disableScreenShare();
-    return await enableCamera();
-  }, [isCameraOn, isScreenSharing, enableCamera, disableCamera]);
-
-  // Screen share controls
-  const enableScreenShare = useCallback(async () => {
-    if (!localStream) return null;
-    if (isScreenSharing) return localStream.getVideoTracks()[0] || null;
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      console.warn('Screen sharing not supported on this browser');
-      throw new Error('Screen sharing not supported on this browser');
-    }
-    const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-    const screenTrack = screen.getVideoTracks()[0];
-    if (screenTrack) {
-      // auto-stop when user ends share from browser UI
-      screenTrack.onended = () => {
-        disableScreenShare();
-      };
-      localStream.addTrack(screenTrack);
-      setIsScreenSharing(true);
-      setIsCameraOn(false);
-    }
-    return screenTrack || null;
-  }, [localStream, isScreenSharing]);
-
-  const disableScreenShare = useCallback(() => {
-    if (!localStream) return;
-    // Remove ALL video tracks to ensure no stale black video frames
-    localStream.getVideoTracks().forEach((t) => {
-      try { t.stop(); } catch {}
-      try { localStream.removeTrack(t); } catch {}
-    });
-    setIsScreenSharing(false);
-  }, [localStream]);
+    return enableCamera();
+  }, [disableCamera, disableScreenShare, enableCamera, isCameraOn, isScreenSharing]);
 
   const toggleScreenShare = useCallback(async () => {
     if (isScreenSharing) {
       disableScreenShare();
       return null;
     }
-    // if camera is on, turn it off first
     if (isCameraOn) disableCamera();
-    return await enableScreenShare();
-  }, [isScreenSharing, isCameraOn, enableScreenShare, disableScreenShare, disableCamera]);
+    return enableScreenShare();
+  }, [disableCamera, disableScreenShare, enableScreenShare, isCameraOn, isScreenSharing]);
 
   const value = useMemo(
     () => ({
@@ -267,7 +347,31 @@ export const MediaProvider = ({ children }) => {
       setMasterGain,
       cleanup,
     }),
-    [localStream, isMuted, isSpeaking, isDeafened, isCameraOn, isScreenSharing, audioElements, initializeAudio, toggleMute, toggleDeafen, enableCamera, disableCamera, toggleCamera, enableScreenShare, disableScreenShare, toggleScreenShare, createAudioElement, attachRemoteStream, removeAudioElement, muteAll, setRemoteGain, setMasterGain, cleanup]
+    [
+      attachRemoteStream,
+      audioElements,
+      cleanup,
+      createAudioElement,
+      disableCamera,
+      disableScreenShare,
+      enableCamera,
+      enableScreenShare,
+      initializeAudio,
+      isCameraOn,
+      isDeafened,
+      isMuted,
+      isScreenSharing,
+      isSpeaking,
+      localStream,
+      muteAll,
+      removeAudioElement,
+      setMasterGain,
+      setRemoteGain,
+      toggleCamera,
+      toggleDeafen,
+      toggleMute,
+      toggleScreenShare,
+    ],
   );
 
   return <MediaContext.Provider value={value}>{children}</MediaContext.Provider>;
